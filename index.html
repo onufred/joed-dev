@@ -1,0 +1,2433 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veeretked.ee — Jõgede Veetasemed</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script type="module">
+  // Firebase imports
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { getFirestore, collection, query, where, orderBy, limit, addDoc, deleteDoc, doc, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+  // Tuvasta keskkond URL-i järgi
+  const isDev = window.location.pathname.includes('/joed-dev') || window.location.hostname === 'localhost';
+
+  // Live Firebase config
+  const firebaseConfigLive = {
+    apiKey: "AIzaSyB1_RN4Z-fz5dL-VzlY_w4ESyBCIbHpZLI",
+    authDomain: "veeretked.firebaseapp.com",
+    projectId: "veeretked",
+    storageBucket: "veeretked.firebasestorage.app",
+    messagingSenderId: "818252951484",
+    appId: "1:818252951484:web:910538c9cec816691b05b9"
+  };
+
+  // Dev Firebase config
+  const firebaseConfigDev = {
+    apiKey: "AIzaSyCTbFiQ6_ozBJEYB72bpYPvO1ySDEWzorI",
+    authDomain: "veeretked-dev.firebaseapp.com",
+    projectId: "veeretked-dev",
+    storageBucket: "veeretked-dev.firebasestorage.app",
+    messagingSenderId: "186991101446",
+    appId: "1:186991101446:web:f63feb2e74184613012587"
+  };
+
+  const firebaseConfig = isDev ? firebaseConfigDev : firebaseConfigLive;
+
+  // Initialize
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const provider = new GoogleAuthProvider();
+  // Soovita kasutaja konto valikut iga kord (vältida vana sessiooni)
+  provider.setCustomParameters({ prompt: 'select_account' });
+
+  // Tee globaalselt kättesaadavaks (et tavalisest <script> osast saaks kasutada)
+  window.fb = {
+    auth, db, provider,
+    signInWithPopup, signOut, onAuthStateChanged,
+    collection, query, where, orderBy, limit,
+    addDoc, deleteDoc, doc, serverTimestamp, onSnapshot,
+    isDev: isDev,
+    projectId: firebaseConfig.projectId
+  };
+
+  // Vaata sisselogimise olekut
+  onAuthStateChanged(auth, (user) => {
+    if (typeof window.onAuthChange === 'function') {
+      window.onAuthChange(user);
+    }
+  });
+
+  // Näita DEV silti, kui dev keskkond
+  if (isDev) {
+    document.addEventListener('DOMContentLoaded', () => {
+      const badge = document.createElement('div');
+      badge.id = 'dev-badge';
+      badge.textContent = '🛠 DEV';
+      badge.title = 'Sa oled arenduskeskkonnas (veeretked-dev). Live keskkond: onufred.github.io/joed/';
+      document.body.appendChild(badge);
+      // Lisa <title>-le ka
+      document.title = '🛠 DEV — ' + document.title;
+    });
+  }
+</script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f0ede8; --surface: #faf9f7; --surface2: #e8e4dd; --border: #d4cfc6;
+    --text: #1a1916; --text2: #6b6660; --text3: #9b958e;
+    --green: #1a6b4a; --green-bg: #e0f2ea;
+    --orange: #9a4e00; --orange-bg: #fdecd8;
+    --red: #8b1a1a; --red-bg: #fde0e0;
+    --grey: #5a5550; --grey-bg: #ece9e4;
+    --accent: #2d5a3d; --radius: 10px;
+  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; position: sticky; top: 0; z-index: 10; }
+  .logo { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; color: var(--accent); }
+  .logo span { color: var(--text3); font-weight: 400; }
+  .last-update { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; margin-top: 2px; }
+  .header-right { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  /* Auth nupud / kasutaja chip */
+  #auth-area { position: relative; }
+  #user-chip { display:none; align-items:center; gap:7px; padding:4px 10px 4px 4px; border-radius:20px; background:var(--surface); border:1px solid var(--border); cursor:pointer; transition:background .15s; }
+  #user-chip:hover { background:var(--surface2); }
+  #user-photo { width:26px; height:26px; border-radius:50%; object-fit:cover; flex-shrink:0; }
+  #user-name { font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; max-width:120px; overflow:hidden; text-overflow:ellipsis; }
+  #user-menu { position:absolute; top:calc(100% + 6px); right:0; min-width:200px; background:var(--surface); border:1px solid var(--border); border-radius:9px; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:50; overflow:hidden; }
+  .user-menu-item { display:block; width:100%; text-align:left; padding:11px 14px; font-size:13px; border:none; background:transparent; color:var(--text); cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .user-menu-item:hover { background:var(--surface2); }
+  .btn { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; transition: all .15s; }
+  .btn:hover { background: var(--surface2); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: #234a31; }
+  main { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+  .status-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 12px; color: var(--text3); font-family: 'DM Mono', monospace; }
+  .sdot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+  .sdot.loading { animation: pulse 1.2s infinite; }
+  .sdot.err { background: #dc2626; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+  @keyframes gpspulse { 0%{transform:scale(0.4);opacity:0.7} 100%{transform:scale(1.4);opacity:0} }
+  /* DEV badge - näitab arenduskeskkonda */
+  #dev-badge { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); background: #d97706; color: #fff; padding: 4px 14px; border-radius: 14px; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 600; letter-spacing: 1px; z-index: 9999; box-shadow: 0 2px 8px rgba(217,119,6,0.4); cursor: help; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; position: relative; }
+  .card::before { content:''; position:absolute; left:0; top:12px; bottom:12px; width:3px; border-radius:0 2px 2px 0; }
+  .card.ok::before{background:var(--green)}.card.warn::before{background:#d97706}
+  .card.danger::before{background:#dc2626}.card.low::before{background:var(--border)}.card.loading::before{background:var(--border)}
+  .card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px; }
+  .card-title { font-size:15px; font-weight:600; }
+  .card-sub { font-size:11px; color:var(--text3); margin-top:2px; font-family:'DM Mono',monospace; }
+  .badge { font-size:10px; font-weight:600; padding:3px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:.3px; white-space:nowrap; flex-shrink:0; }
+  .badge-ok{background:var(--green-bg);color:var(--green)}.badge-warn{background:var(--orange-bg);color:var(--orange)}
+  .badge-danger{background:var(--red-bg);color:var(--red)}.badge-low,.badge-loading{background:var(--grey-bg);color:var(--grey)}
+  .level-big { display:flex; align-items:baseline; gap:4px; margin:4px 0 12px; }
+  .level-num { font-family:'DM Mono',monospace; font-size:36px; font-weight:500; line-height:1; }
+  .level-unit { font-size:14px; color:var(--text3); }
+  .level-na { font-family:'DM Mono',monospace; font-size:24px; color:var(--text3); }
+  .bar-track { height:6px; background:var(--surface2); border-radius:3px; position:relative; overflow:visible; margin:10px 0 18px; }
+  .bar-fill { height:100%; border-radius:3px; transition:width .5s; }
+  .bar-mk { position:absolute; top:-5px; width:1.5px; height:16px; border-radius:1px; transform:translateX(-50%); }
+  .bar-lbl { position:absolute; top:14px; font-size:9px; font-family:'DM Mono',monospace; color:var(--text3); transform:translateX(-50%); white-space:nowrap; }
+  .bar-ends { display:flex; justify-content:space-between; font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; }
+  .pills { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .pill { font-size:11px; font-weight:500; padding:4px 10px; border-radius:20px; border:1px solid; display:inline-flex; align-items:center; gap:4px; }
+  .pill-on{background:var(--green-bg);color:var(--green);border-color:#a7d9bc}
+  .pill-off{background:var(--grey-bg);color:var(--text3);border-color:var(--border);text-decoration:line-through;opacity:.6}
+  .pill-warn{background:var(--orange-bg);color:var(--orange);border-color:#f0b97a}
+  .pill-danger{background:var(--red-bg);color:var(--red);border-color:#f5a0a0}
+  .extras { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 12px; }
+  .extra { font-size:11px; font-family:'DM Mono',monospace; padding:4px 9px; border-radius:7px; background:var(--bg); color:var(--text2); display:inline-flex; align-items:center; gap:5px; border:1px solid var(--surface2); }
+  .extra .ex-lbl { color:var(--text3); font-size:10px; }
+  .extra b { color:var(--text); font-weight:500; }
+  .extra.up b { color:var(--green); }
+  .extra.down b { color:var(--orange); }
+  .cache-tag { font-size:10px; padding:3px 7px; border-radius:5px; background:var(--orange-bg); color:var(--orange); font-family:'DM Mono',monospace; display:inline-flex; align-items:center; gap:3px; margin-top:6px; border:1px solid #f0b97a; }
+  /* Veepeale modal */
+  .vmodal { width: 720px; max-width: 96vw; max-height: 92vh; }
+  .vp-title { font-size:18px; font-weight:600; margin-bottom:6px; }
+  .vp-sub { font-size:12px; color:var(--text3); margin-bottom:14px; font-family:'DM Mono',monospace; }
+  .vp-tabs { display:flex; gap:4px; margin-bottom:12px; background:var(--bg); border-radius:8px; padding:4px; flex-wrap:wrap; }
+  .vp-tab { font-size:12px; font-weight:500; padding:7px 12px; border-radius:6px; border:none; background:transparent; color:var(--text2); cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .vp-tab.active { background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.1); }
+  .vp-loik-info { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .vp-info-pill { font-size:11px; padding:4px 9px; border-radius:7px; background:var(--bg); color:var(--text2); border:1px solid var(--surface2); display:inline-flex; align-items:center; gap:5px; font-family:'DM Mono',monospace; }
+  .vp-info-pill b { color:var(--text); font-weight:500; }
+  .vp-loik-mark { font-size:13px; color:var(--text); margin-bottom:12px; padding:10px 12px; background:var(--bg); border-radius:8px; line-height:1.5; }
+  #vmap { height: 380px; border-radius: 10px; border: 1px solid var(--border); margin-bottom:12px; z-index:1; position:relative; }
+  .gps-controls { position:absolute; top:10px; right:10px; z-index:1000; display:flex; flex-direction:column; gap:6px; }
+  .gps-controls button { background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:8px 12px; font-size:12px; font-weight:500; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.15); font-family:'DM Sans',sans-serif; color:var(--text); white-space:nowrap; }
+  .gps-controls button:hover { background:var(--surface2); }
+  .gps-info { position:absolute; bottom:10px; left:10px; right:10px; z-index:1000; background:rgba(255,255,255,0.96); border:1px solid var(--border); border-radius:8px; padding:8px 10px; box-shadow:0 2px 8px rgba(0,0,0,0.12); display:flex; gap:14px; justify-content:space-around; font-family:'DM Sans',sans-serif; backdrop-filter:blur(4px); }
+  .gpsi-item { text-align:center; flex:1; min-width:0; }
+  .gpsi-lbl { font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; margin-bottom:2px; white-space:nowrap; }
+  .gpsi-val { font-size:14px; font-weight:600; color:var(--text); font-family:'DM Mono',monospace; white-space:nowrap; }
+  /* Ilmaprognoosi paneel */
+  .weather-panel { padding:12px; background:var(--bg); border:1px solid var(--border); border-radius:10px; margin-bottom:12px; font-size:13px; color:var(--text2); }
+  .weather-panel.loaded { padding:14px; }
+  .wp-current { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; padding-bottom:12px; border-bottom:1px solid var(--surface2); margin-bottom:12px; }
+  .wp-cur-main { display:flex; align-items:center; gap:12px; }
+  .wp-cur-emoji { font-size:42px; line-height:1; }
+  .wp-cur-temp { font-size:24px; font-weight:600; color:var(--text); font-family:'DM Mono',monospace; }
+  .wp-cur-desc { font-size:12px; color:var(--text3); margin-top:2px; }
+  .wp-cur-side { display:flex; gap:14px; flex-wrap:wrap; }
+  .wp-side-item { font-size:12px; }
+  .wp-side-lbl { color:var(--text3); margin-bottom:2px; }
+  .wp-side-val { font-weight:600; color:var(--text); font-family:'DM Mono',monospace; display:inline-flex; align-items:center; gap:4px; }
+  .wp-arrow { display:inline-block; color:var(--accent); font-size:14px; transform-origin:center; }
+  .wp-forecast { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; }
+  .wp-day { text-align:center; padding:8px 4px; background:var(--surface); border:1px solid var(--surface2); border-radius:8px; font-size:11px; }
+  .wp-day-name { font-weight:600; color:var(--text); margin-bottom:4px; }
+  .wp-day-emoji { font-size:24px; line-height:1; margin:4px 0; }
+  .wp-day-temp { font-family:'DM Mono',monospace; }
+  .wp-day-temp b { font-size:13px; color:var(--text); }
+  .wp-day-temp span { color:var(--text3); margin-left:3px; font-size:11px; }
+  .wp-day-prec { color:#3b82f6; font-size:10px; margin-top:2px; font-family:'DM Mono',monospace; }
+  .wp-day-wind { color:var(--text3); font-size:10px; font-family:'DM Mono',monospace; }
+  /* Graafikud */
+  .g-section { margin-bottom:18px; }
+  .g-section-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:8px; }
+  .g-bars { display:flex; gap:1px; align-items:flex-end; height:62px; padding:0 2px; background:var(--bg); border:1px solid var(--surface2); border-radius:6px; padding-top:2px; padding-bottom:2px; }
+  .g-bar { flex:1; min-width:3px; display:flex; align-items:flex-end; justify-content:center; height:60px; position:relative; }
+  .g-bar.new-day { border-left:1px dashed var(--text3); }
+  .g-bar-fill { width:100%; border-radius:1px 1px 0 0; transition:height .3s; min-height:1px; }
+  .g-line { background:var(--bg); border:1px solid var(--surface2); border-radius:6px; padding:4px; }
+  .g-axis { position:relative; height:14px; margin-top:2px; }
+  .g-axis-lbl { position:absolute; font-size:9px; color:var(--text3); font-family:'DM Mono',monospace; transform:translateX(-50%); }
+  .g-note { background:var(--green-bg); border:1px solid #a7d9bc; border-radius:8px; padding:10px 12px; font-size:12px; color:var(--text); margin-top:14px; }
+  .g-water { background:var(--bg); border:1px solid var(--surface2); border-radius:6px; padding:8px; }
+  .g-water-axis { position:relative; height:16px; margin-top:4px; font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; }
+  .g-water-axis span { position:absolute; }
+  .g-water-info { display:flex; flex-wrap:wrap; gap:14px; margin-top:8px; font-size:11px; color:var(--text2); }
+  .g-water-info b { color:var(--text); font-weight:600; }
+  /* Chat modal */
+  .c-messages { flex:1; min-height:280px; max-height:50vh; overflow-y:auto; padding:8px; background:var(--bg); border:1px solid var(--surface2); border-radius:8px; margin:8px 0 12px; display:flex; flex-direction:column; gap:8px; }
+  .c-empty { padding:30px 12px; text-align:center; color:var(--text3); font-size:13px; }
+  .c-msg { display:flex; gap:8px; align-items:flex-start; }
+  .c-msg.mine { flex-direction:row-reverse; }
+  .c-msg-avatar { width:30px; height:30px; border-radius:50%; flex-shrink:0; background:var(--surface2); object-fit:cover; }
+  .c-msg-avatar-fallback { width:30px; height:30px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; flex-shrink:0; }
+  .c-msg-body { max-width:75%; }
+  .c-msg-head { display:flex; align-items:baseline; gap:6px; margin-bottom:2px; font-size:11px; }
+  .c-msg.mine .c-msg-head { flex-direction:row-reverse; }
+  .c-msg-name { font-weight:600; color:var(--text); font-size:12px; }
+  .c-msg-time { color:var(--text3); font-family:'DM Mono',monospace; font-size:10px; }
+  .c-msg-text { background:var(--surface); border:1px solid var(--surface2); border-radius:10px; padding:8px 11px; font-size:13px; color:var(--text); line-height:1.4; word-wrap:break-word; white-space:pre-wrap; }
+  .c-msg.mine .c-msg-text { background:var(--green-bg); border-color:#a7d9bc; }
+  .c-msg-actions { display:flex; gap:4px; margin-top:3px; opacity:0; transition:opacity .15s; }
+  .c-msg:hover .c-msg-actions { opacity:1; }
+  .c-msg-actions button { font-size:10px; padding:2px 7px; border-radius:5px; border:1px solid var(--surface2); background:transparent; color:var(--text3); cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .c-msg-actions button:hover { background:var(--surface2); color:var(--text); }
+  .c-compose { padding:8px 0; }
+  #c-text { width:100%; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:'DM Sans',sans-serif; font-size:13px; resize:vertical; box-sizing:border-box; min-height:60px; }
+  #c-text:focus { outline:none; border-color:var(--accent); }
+  .c-input-foot { display:flex; justify-content:space-between; align-items:center; margin-top:6px; gap:8px; flex-wrap:wrap; }
+  .c-counter { font-size:11px; color:var(--text3); font-family:'DM Mono',monospace; }
+  .c-counter.warn { color:var(--orange); }
+  .c-counter.danger { color:var(--red); }
+  /* Vestlus nupp jõe kaardil */
+  .c-river-btn { font-size:11px; padding:5px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text2); cursor:pointer; font-family:'DM Sans',sans-serif; margin-bottom:8px; width:100%; }
+  .c-river-btn:hover { background:var(--surface2); }
+  .c-river-btn .c-msg-count { background:var(--accent); color:#fff; padding:1px 6px; border-radius:9px; font-size:10px; margin-left:5px; font-family:'DM Mono',monospace; }
+  .leaflet-popup-content-wrapper { border-radius: 7px; }
+  .leaflet-popup-content { font-family:'DM Sans',sans-serif; font-size:12px; margin:8px 12px; }
+  .leaflet-popup-content b { font-size:13px; color:var(--text); }
+  .vp-contact { margin-top:14px; padding:14px; background:var(--green-bg); border:1px solid #a7d9bc; border-radius:10px; }
+  .vp-contact-title { font-weight:600; font-size:14px; color:var(--green); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+  .vp-contact-features { display:flex; flex-wrap:wrap; gap:6px 12px; font-size:12px; color:var(--text); margin-bottom:10px; }
+  .vp-contact-features span:before { content:'✓ '; color:var(--green); font-weight:600; }
+  .vp-contact-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .vp-contact-btn { font-size:12px; padding:7px 12px; border-radius:7px; border:1px solid var(--green); background:var(--surface); color:var(--green); cursor:pointer; font-weight:500; text-decoration:none; display:inline-flex; align-items:center; gap:5px; font-family:'DM Sans',sans-serif; }
+  .vp-contact-btn:hover { background:var(--green-bg); }
+  .vp-contact-btn.primary { background:var(--green); color:#fff; }
+  .vp-contact-btn.primary:hover { background:#0f4f37; }
+  .vp-empty { padding:40px 20px; text-align:center; color:var(--text3); font-size:14px; }
+  .vp-legend { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; font-size:11px; color:var(--text2); }
+  .vp-legend-item { display:inline-flex; align-items:center; gap:4px; }
+  .vp-legend-dot { width:12px; height:12px; border-radius:50%; display:inline-block; }
+  .vp-btn { font-size:11px; padding:5px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text2); cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .vp-btn:hover { background:var(--surface2); }
+  .card-foot { display:flex; align-items:center; justify-content:space-between; padding-top:10px; border-top:1px solid var(--surface2); gap:6px; flex-wrap:wrap; }
+  .foot-src { font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; display:flex; align-items:center; gap:4px; }
+  .fdot { width:5px; height:5px; border-radius:50%; }
+  .fdot.live{background:var(--green)}
+  .foot-btns { display:flex; gap:4px; align-items:center; }
+  .ibtn { font-size:11px; padding:3px 8px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text2); cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .ibtn:hover { background:var(--surface2); }
+  .sp { background:var(--bg); border-radius:8px; padding:12px; margin-top:10px; }
+  .sp-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+  .sp-row label { font-size:11px; color:var(--text2); min-width:120px; }
+  .sp-row input { width:64px; font-size:12px; padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); text-align:right; font-family:'DM Mono',monospace; }
+  .err-txt { font-size:10px; color:var(--red); margin-top:4px; }
+  .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:100; align-items:center; justify-content:center; }
+  .overlay.open { display:flex; }
+  .modal { background:var(--surface); border-radius:14px; border:1px solid var(--border); padding:22px; width:360px; max-width:94vw; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.15); }
+  .modal-title { font-size:16px; font-weight:600; margin-bottom:14px; }
+  .mrow { margin-bottom:10px; }
+  .mrow label { display:block; font-size:11px; color:var(--text2); margin-bottom:4px; font-weight:500; }
+  .mrow input { width:100%; font-size:13px; padding:7px 10px; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; }
+  .mgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .mact { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
+  .merr { background:var(--red-bg); border:1px solid #f5a0a0; border-radius:7px; padding:7px 10px; font-size:12px; color:var(--red); margin:6px 0; display:none; }
+  .slist { max-height:210px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; margin-top:4px; }
+  .si { padding:10px 12px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--surface2); transition:background .1s; user-select:none; -webkit-tap-highlight-color:rgba(45,90,61,.2); }
+  .si:active{background:var(--green-bg)!important;}
+  .si:last-child{border-bottom:none}.si:hover{background:var(--bg)}.si.sel{background:var(--green-bg);color:var(--green)}
+  .si-sub { font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; margin-top:1px; }
+  .ssrch { width:100%; font-size:13px; padding:7px 10px; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; margin-bottom:6px; }
+  .empty { text-align:center; padding:40px 20px; color:var(--text3); font-size:14px; grid-column:1/-1; }
+  @media(max-width:600px){main{padding:14px}header{padding:12px 14px}}
+  /* Footer */
+  .app-footer { max-width:1100px; margin:30px auto 20px; padding:20px 24px; border-top:1px solid var(--surface2); display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; font-size:11px; color:var(--text3); font-family:'DM Mono', monospace; }
+  .app-footer a { color:var(--text2); text-decoration:none; border-bottom:1px dotted var(--text3); }
+  .app-footer a:hover { color:var(--accent); border-bottom-color:var(--accent); }
+  .footer-sep { color:var(--text3); }
+  .footer-left { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  @media(max-width:600px){
+    .app-footer { padding:16px 14px; flex-direction:column; align-items:flex-start; gap:8px; }
+    .footer-right { font-size:10px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="logo">veeretked<span>.ee</span></div>
+    <div class="last-update" id="lupd">—</div>
+  </div>
+  <div class="header-right">
+    <button class="btn" id="rbtn" onclick="refreshAll()">↻ Uuenda</button>
+    <button class="btn" onclick="resetDefaults()" title="Lähtesta vaikimisi nimekiri">🔄 Lähtesta</button>
+    <button class="btn" onclick="exportSettings()">📤 Ekspordi</button>
+    <button class="btn btn-primary" onclick="openM()">+ Lisa jõgi</button>
+    <div id="auth-area">
+      <button class="btn" id="login-btn" onclick="doLogin()">🔐 Logi sisse</button>
+      <div id="user-chip" style="display:none;" onclick="toggleUserMenu()" title="Klõpsa profiili menüü jaoks">
+        <img id="user-photo" src="" alt=""/>
+        <span id="user-name"></span>
+        <span style="color:var(--text3);font-size:11px;">▾</span>
+      </div>
+      <div id="user-menu" style="display:none;">
+        <div id="user-menu-email" style="padding:10px 14px; font-size:11px; color:var(--text3); border-bottom:1px solid var(--surface2); font-family:'DM Mono',monospace; word-break:break-all;"></div>
+        <button class="user-menu-item" onclick="doLogout()">🚪 Logi välja</button>
+      </div>
+    </div>
+  </div>
+</header>
+<main>
+  <div class="status-bar">
+    <span class="sdot loading" id="sdot"></span>
+    <span id="stxt">Ühendun Keskkonnaagentuuri andmetega...</span>
+  </div>
+  <div class="grid" id="grid"></div>
+</main>
+
+<footer class="app-footer">
+  <div class="footer-left">
+    <span>© <a href="https://veeretked.ee" target="_blank">veeretked.ee</a></span>
+    <span class="footer-sep">·</span>
+    <a href="./privaatsus.html">Privaatsus</a>
+    <span class="footer-sep">·</span>
+    <a href="./tingimused.html">Tingimused</a>
+  </div>
+  <div class="footer-right">
+    <span>Andmed: Riigi Ilmateenistus, LVĢMC, Open-Meteo, OSM</span>
+  </div>
+</footer>
+
+<div class="overlay" id="modal">
+  <div class="modal">
+    <div class="modal-title">Lisa jõgi jälgimisele</div>
+    <p style="font-size:11px;color:var(--text3);margin-bottom:8px;">Andmed uuenevad automaatselt Keskkonnaagentuuri mõõtejaamadest.</p>
+    <input class="ssrch" id="ssrch" type="text" placeholder="Otsi jõge või jaama..." oninput="filterSt()"/>
+    <div class="slist" id="slist"></div>
+    <div id="seli" style="font-size:11px;color:var(--text3);margin:6px 0;min-height:16px;"></div>
+    <div class="mgrid">
+      <div class="mrow"><label>Isiklik miinimum (cm)</label><input id="ppm" type="number" placeholder="(valikuline)"/></div>
+      <div class="mrow"><label>Min kajak (cm)</label><input id="pkm" type="number" placeholder="40"/></div>
+      <div class="mrow"><label>Min rafting (cm)</label><input id="prm" type="number" placeholder="60"/></div>
+      <div class="mrow"><label>Max ohutu (cm)</label><input id="pms" type="number" placeholder="150"/></div>
+      <div class="mrow"><label>Absoluutne max</label><input id="pam" type="number" placeholder="200"/></div>
+    </div>
+    <div class="merr" id="merr"></div>
+    <div class="mact">
+      <button class="btn" onclick="closeM()">Tühista</button>
+      <button class="btn btn-primary" onclick="addR()">Lisa jõgi</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="emodal">
+  <div class="modal">
+    <div class="modal-title">📤 Ekspordi seaded</div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">Kopeeri allolev tekst (vajuta "Kopeeri") ja saada see Claude'ile chati. Tema teeb selle põhjal Sheetsi nimekirja.</p>
+    <textarea id="etext" readonly style="width:100%;height:280px;font-family:'DM Mono',monospace;font-size:11px;padding:10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);resize:vertical;"></textarea>
+    <div class="mact">
+      <button class="btn" onclick="closeE()">Sulge</button>
+      <button class="btn btn-primary" id="cpybtn" onclick="copyE()">📋 Kopeeri</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="vmodal">
+  <div class="modal vmodal">
+    <div class="vp-title" id="vp-title">🗺️ Veepeale</div>
+    <div class="vp-sub" id="vp-sub">—</div>
+    <div class="vp-tabs" id="vp-tabs"></div>
+    <div id="vp-content"></div>
+    <div class="mact">
+      <button class="btn btn-primary" onclick="closeV()">Sulge</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="gmodal">
+  <div class="modal vmodal">
+    <div class="vp-title" id="g-title">📊 Ilm ja veetase</div>
+    <div class="vp-sub" id="g-sub">—</div>
+    <div id="g-content" style="margin-top:8px;"></div>
+    <div class="mact">
+      <button class="btn btn-primary" onclick="closeGraph()">Sulge</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="cmodal">
+  <div class="modal vmodal" style="display:flex;flex-direction:column;">
+    <div class="vp-title" id="c-title">💬 Vestlus</div>
+    <div class="vp-sub" id="c-sub">—</div>
+    <div id="c-messages" class="c-messages">
+      <div style="padding:30px 12px;text-align:center;color:var(--text3);font-size:13px;">⏳ Laen sõnumeid...</div>
+    </div>
+    <div id="c-compose" class="c-compose">
+      <div id="c-login-prompt" style="display:none;">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:8px;">Logi sisse, et osaleda vestluses</p>
+        <button class="btn btn-primary" onclick="closeChat();doLogin();">🔐 Logi sisse Google'iga</button>
+      </div>
+      <div id="c-input-row" style="display:none;">
+        <textarea id="c-text" placeholder="Kirjuta sõnum... (nt 'Sõitsin täna, vesi on hea')" maxlength="1000" rows="2"></textarea>
+        <div class="c-input-foot">
+          <span id="c-counter" class="c-counter">0/1000</span>
+          <button class="btn btn-primary" id="c-send-btn" onclick="sendMessage()">📤 Saada</button>
+        </div>
+      </div>
+    </div>
+    <div class="mact">
+      <button class="btn" onclick="closeChat()">Sulge</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SK='rv9';
+// A=Veekogu, B=Jaam, C=Veetase(cm) — täpselt sinu Sheetsi struktuur
+const SHEET_ID='1ih6_OZSzPpxQvK4-kdfyMdZDO8j0C_CTPtMTjH3KFkY';
+const GVIZ_EE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=0';
+const GVIZ_LV_STAT='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=2032714583';
+const GVIZ_LV_DATA='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=410941272';
+const GVIZ_DEFAULTS='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=2023148913';
+const GVIZ_CACHE_EE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=2068334598';
+const GVIZ_CACHE_LV='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=296812902';
+const GVIZ_LOIGUD='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=1946905220';
+const GVIZ_PUNKTID='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=1674967644';
+const GVIZ_HIST_EE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=25755121';
+const GVIZ_HIST_LV='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=873015521';
+
+// Läti jaamade -> jõgede/veekogude kaardistus (jaama nime järgi, normaliseeritud)
+// Allikas: LVĢMC PRIS süsteem, LVĢMC dokumendid, geograafia
+const LV_RIVERS={
+  // Gauja jõgi
+  'sigulda':'Gauja','valmiera':'Gauja','carnikava':'Gauja','velēna':'Gauja',
+  'lejasciems':'Gauja','meltūri':'Gauja','melturi':'Gauja',
+  // Salaca jõgi
+  'mazsalaca':'Salaca','lagaste':'Salaca','salacgrīva':'Salaca',
+  // Lielupe jõgi (ja harud)
+  'jelgava':'Lielupe','mežotne':'Lielupe','kalnciems':'Lielupe','staļģene':'Lielupe',
+  'lielupes grīva':'Lielupe','bauska':'Mēmele','bramberģe':'Iecava',
+  // Daugava jõgi (ja harud)
+  'daugavpils':'Daugava','jēkabpils':'Daugava','pļaviņas':'Daugava','rīga':'Daugava',
+  'krāslava':'Daugava','piedruja':'Daugava','jersika':'Daugava','daugavgrīva':'Daugava',
+  'aiviekstes hes':'Aiviekste','lubāna':'Aiviekste','meirāni':'Aiviekste',
+  'zeļķi':'Daugava','vaikuļāni':'Daugava','sudrabkalni':'Daugava',
+  'pakuļu hes':'Daugava','pilskalni':'Daugava',
+  // Venta jõgi
+  'kuldīga':'Venta','ventspils':'Venta','renda':'Abava','vendzava':'Venta',
+  // Roja jõgi
+  'roja':'Roja','rojupe':'Roja',
+  // Gauja basseini väiksemad jõed
+  'cēsis':'Gauja','priekuļi':'Gauja','straupe':'Brasla',
+  // Ogre jõgi
+  'ogre':'Ogre','suntaži':'Ogre',
+  // Iecava ja Misa
+  'iecava':'Iecava','baldone':'Misa',
+  // Aiviekste
+  'aiviekste':'Aiviekste',
+  // Jugla
+  'jugla':'Jugla','baltezers':'Jugla',
+  // Latgale järved ja jõed
+  'rēzekne':'Rēzekne','vērēmi':'Rēzekne','ludza':'Ludza',
+  'pasiene':'Zilupe','zilupe':'Zilupe',
+  'kaunata':'Rēzekne','višķi':'Daugava','griškāni':'Rēzekne',
+  // Kuramaa
+  'liepāja':'Bārta','liepājas ezers':'Liepājas ezers','rucava':'Bārta',
+  'cīrava':'Tebra','vārdava':'Vārtaja',
+  // Põhja-Vidzeme
+  'alūksne':'Pededze','ape':'Vaidava','litene':'Pededze',
+  'lenderņa':'Pededze','dūkupji':'Pededze','oleri':'Seda',
+  'taurene':'Amata','zosēni':'Amata',
+  // Burtnieki järv ja Salaca
+  'burtnieki':'Burtnieku ezers',
+  // Riia laht ja rannikujaamad
+  'mērsrags':'Rīgas līcis','kolka':'Rīgas līcis','andrejosta':'Daugava',
+  'sloka':'Lielupe','jūrmala':'Lielupe','skulte':'Rīgas līcis',
+  'ainaži':'Rīgas līcis','spīdoles':'Rīgas līcis',
+  // Engure ja Usma järved
+  'usma':'Usmas ezers','engure':'Engures ezers',
+  // Muud järved
+  'ķīšezers':'Ķīšezers','vičaki':'Daugava','baloži':'Daugava',
+  // Plaviņu veehoidla
+  'lielveisi':'Daugava','meņģele':'Daugava','lielpeči':'Daugava',
+  // Brūnuļi (Salaca)
+  'brūnuļi':'Salaca','vilnīši':'Lielupe',
+  // Ülejäänud
+  'kūlenieki':'Daugava','alderi':'Daugava','tērande':'Tebra',
+  'pieviķi':'Daugava','sīļi':'Mēmele','stariņi':'Pededze',
+  'lozdova':'Daugava','alši':'Daugava','ūziņi':'Lielupe',
+  'zaķi':'Lielupe','dūkste':'Pededze','dukste':'Pededze',
+};
+
+// Normaliseerimine: lowercase + diakriitikute eemaldamine (et leida ka ilma täpitähtedeta)
+function normLV(s){
+  return s.toLowerCase()
+    .replace(/[āăą]/g,'a').replace(/[čć]/g,'c').replace(/[ēęě]/g,'e')
+    .replace(/[īįı]/g,'i').replace(/[ķ]/g,'k').replace(/[ļ]/g,'l')
+    .replace(/[ņ]/g,'n').replace(/[ōő]/g,'o').replace(/[š]/g,'s')
+    .replace(/[ū]/g,'u').replace(/[žź]/g,'z').replace(/[õö]/g,'o')
+    .replace(/[ä]/g,'a').replace(/[ü]/g,'u');
+}
+// Loo ka normaliseeritud variandid
+const LV_RIVERS_NORM={};
+for(const k in LV_RIVERS){
+  LV_RIVERS_NORM[normLV(k)]=LV_RIVERS[k];
+}
+
+let rivers=[], liveData={}, allSt=[], filtSt=[], selSt=null, editId=null, busy=false, lupd=null;
+let defaults=[]; // Sinu Sheetsist tulevad vaikimisi jõed
+let loigud=[]; // Jõgede lõigud
+let punktid=[]; // Lõikude punktid (veeskamine, laager, jne)
+let activeLoik=null; // Praegu vaadeldav lõik
+let vMap=null; // Leaflet map instance
+let gpsWatchId=null; // GPS jälgimise ID
+let gpsMarker=null; // Sinine täpp kaardil
+let gpsCircle=null; // Täpsuse ring
+let gpsFollowing=false; // Kas kaart järgib kasutajat
+let gpsHistory=[]; // [{lat, lng, ts}, ...] viimased GPS punktid kiiruse arvutamiseks
+let gpsCurrentRoute=null; // Praeguse lõigu BRouter joone andmed [[lat,lng], ...] (km arvutamiseks)
+let gpsCurrentRouteTotalKm=0; // Joone kogupikkus (cache)
+const SK_DELETED='rv9_deleted'; // Kasutaja eemaldatud vaikimisi jõed (jaam-nimed)
+const SK_CUSTOMIZED='rv9_customized'; // Kasutaja muudetud jõed (jaam -> {kayakMin, raftMin, ...})
+
+// Parsi koordinaadid stringist "57.85, 27.10" → [57.85, 27.10]
+function parseCoords(s){
+  if(!s)return null;
+  const str=String(s).trim();
+  const parts=str.split(/[,;]/).map(p=>p.trim());
+  if(parts.length<2)return null;
+  const lat=parseFloat(parts[0].replace(',','.'));
+  const lng=parseFloat(parts[1].replace(',','.'));
+  if(isNaN(lat)||isNaN(lng))return null;
+  return [lat,lng];
+}
+
+// Haversine: kahe lat/lng punkti vaheline distants meetrites
+function haversine(a, b){
+  const R=6371000;
+  const toRad=d=>d*Math.PI/180;
+  const dLat=toRad(b[0]-a[0]);
+  const dLng=toRad(b[1]-a[1]);
+  const lat1=toRad(a[0]);
+  const lat2=toRad(b[0]);
+  const x=Math.sin(dLat/2)**2+Math.sin(dLng/2)**2*Math.cos(lat1)*Math.cos(lat2);
+  return 2*R*Math.asin(Math.sqrt(x));
+}
+
+// Leia joonel lähima punkti indeks etteantud asukohale
+function nearestRouteIdx(pos, route){
+  if(!route||route.length===0)return -1;
+  let bestIdx=0, bestDist=Infinity;
+  for(let i=0;i<route.length;i++){
+    const d=haversine(pos, route[i]);
+    if(d<bestDist){bestDist=d; bestIdx=i;}
+  }
+  return bestIdx;
+}
+
+// Arvuta joone pikkus alates indeksist kuni lõpuni (meetrites)
+function routeLengthFrom(route, fromIdx){
+  if(!route||fromIdx<0)return 0;
+  let total=0;
+  for(let i=fromIdx;i<route.length-1;i++){
+    total+=haversine(route[i], route[i+1]);
+  }
+  return total;
+}
+
+function lsLoad(){try{const r=localStorage.getItem(SK);if(r)return JSON.parse(r);}catch(e){}return null;}
+function lsSave(){try{
+  // Salvesta ainult kasutaja enda lisatud jõed (mitte vaikimisi - need tulevad Sheetsist)
+  const userOnly=rivers.filter(r=>!r.isDefault);
+  localStorage.setItem(SK,JSON.stringify(userOnly));
+}catch(e){}}
+
+// Üldine GVIZ JSONP-stiilis laadija — kuna tegelikult fetch on ka lubatud sama-päritolu
+// kontekstis (https), proovime kõigepealt fetch'i ja kui ebaõnnestub, kasutame script tag'i
+async function fetchGvizJSON(url){
+  try{
+    const resp=await fetch(url,{cache:'no-cache'});
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const raw=await resp.text();
+    const m=raw.match(/setResponse\(([\s\S]+)\);?\s*$/);
+    if(!m)throw new Error('Vale gviz vastus');
+    const data=JSON.parse(m[1]);
+    if(!data.table)throw new Error('Tabel puudub');
+    return data.table;
+  }catch(e){
+    // Fallback: script tag (file:// jaoks)
+    return new Promise((resolve,reject)=>{
+      window.google=window.google||{};
+      window.google.visualization=window.google.visualization||{};
+      window.google.visualization.Query=window.google.visualization.Query||{};
+      let done=false;
+      const oldSet=window.google.visualization.Query.setResponse;
+      window.google.visualization.Query.setResponse=function(data){
+        if(done)return;done=true;
+        window.google.visualization.Query.setResponse=oldSet||(()=>{});
+        if(!data.table)reject(new Error('Tabel puudub'));
+        else resolve(data.table);
+      };
+      const s=document.createElement('script');
+      s.src=url+'&tq='+encodeURIComponent('select *');
+      s.onerror=()=>{if(done)return;done=true;reject(new Error('Skripti viga'));};
+      document.head.appendChild(s);
+      setTimeout(()=>{if(done)return;done=true;reject(new Error('Timeout'));},15000);
+    });
+  }
+}
+
+async function loadCSV(){
+  liveData={};allSt=[];
+
+  // Abifunktsioon: arv parsimine, lubab nii numbri kui stringi (komaga ka)
+  const num=(raw)=>{
+    if(raw==null||raw==='')return null;
+    const v=typeof raw==='number'?raw:parseFloat(String(raw).replace(',','.'));
+    return isNaN(v)?null:v;
+  };
+
+  // Üldine Eesti veergude tuvastus (kasutame nii Sheet1 kui Cache_EE jaoks)
+  const findEEColumns=(t)=>{
+    let veIdx=-1, jaIdx=-1, lvIdx=-1, dtIdx=-1, wtIdx=-1, atIdx=-1;
+    if(t.cols){
+      for(let i=0;i<t.cols.length;i++){
+        const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
+        if(veIdx<0&&(lbl.includes('veekogu')||lbl.includes('jõgi')))veIdx=i;
+        else if(jaIdx<0&&lbl.includes('jaam'))jaIdx=i;
+        else if(lvIdx<0&&lbl.includes('veetase')&&!lbl.includes('muut'))lvIdx=i;
+        else if(dtIdx<0&&(lbl.includes('muut')||(lbl.includes('24')&&lbl.includes('h'))))dtIdx=i;
+        else if(wtIdx<0&&lbl.includes('veetemp'))wtIdx=i;
+        else if(atIdx<0&&(lbl.includes('õhutemp')||lbl.includes('ohutemp')))atIdx=i;
+      }
+    }
+    if(veIdx<0)veIdx=0;
+    if(jaIdx<0)jaIdx=1;
+    if(lvIdx<0)lvIdx=2;
+    return {veIdx, jaIdx, lvIdx, dtIdx, wtIdx, atIdx};
+  };
+
+  const parseEERow=(c, idx, isCache)=>{
+    if(!c||c.length<3)return null;
+    const veekogu=(c[idx.veIdx]&&c[idx.veIdx].v!=null)?String(c[idx.veIdx].v).trim():'';
+    const jaam=(c[idx.jaIdx]&&c[idx.jaIdx].v!=null)?String(c[idx.jaIdx].v).trim():'';
+    if(!veekogu&&!jaam)return null;
+    const lvl=num(c[idx.lvIdx]?c[idx.lvIdx].v:null);
+    if(lvl===null)return null;
+    const delta24=idx.dtIdx>=0&&c[idx.dtIdx]?num(c[idx.dtIdx].v):null;
+    const waterT=idx.wtIdx>=0&&c[idx.wtIdx]?num(c[idx.wtIdx].v):null;
+    const airT=idx.atIdx>=0&&c[idx.atIdx]?num(c[idx.atIdx].v):null;
+    return {level:Math.round(lvl),jaam,veekogu,country:'EE',
+      delta24:delta24!=null?Math.round(delta24*10)/10:null,
+      waterT:waterT!=null?Math.round(waterT*10)/10:null,
+      airT:airT!=null?Math.round(airT*10)/10:null,
+      isCache:!!isCache};
+  };
+
+  // 1) Eesti andmed - laeme paralleelselt Sheet1 (live) ja Cache_EE (varuks)
+  let liveEE={}, cacheEE={};
+  try{
+    const tEE=await fetchGvizJSON(GVIZ_EE);
+    const idx=findEEColumns(tEE);
+    for(const row of (tEE.rows||[])){
+      const obj=parseEERow(row.c, idx, false);
+      if(obj)liveEE[obj.jaam.toLowerCase()]=obj;
+    }
+  }catch(e){console.warn('Eesti live laadimine ebaõnnestus:',e);}
+
+  try{
+    const tEE2=await fetchGvizJSON(GVIZ_CACHE_EE);
+    const idx=findEEColumns(tEE2);
+    for(const row of (tEE2.rows||[])){
+      const obj=parseEERow(row.c, idx, true);
+      if(obj)cacheEE[obj.jaam.toLowerCase()]=obj;
+    }
+  }catch(e){console.warn('Eesti cache laadimine ebaõnnestus:',e);}
+
+  // Kombineerime: live on prioriteetne, cache täidab puuduvad jaamad
+  const allEEKeys=new Set([...Object.keys(liveEE), ...Object.keys(cacheEE)]);
+  for(const k of allEEKeys){
+    const obj=liveEE[k]||cacheEE[k];
+    if(obj){
+      liveData[k]=obj;
+      allSt.push(obj);
+    }
+  }
+
+  // 2) Läti jaamade nimekiri (Station_id -> Name)
+  const lvStations={};
+  try{
+    const tLV=await fetchGvizJSON(GVIZ_LV_STAT);
+    let sidIdx=-1, nameIdx=-1;
+    if(tLV.cols){
+      for(let i=0;i<tLV.cols.length;i++){
+        const lbl=(tLV.cols[i].label||tLV.cols[i].id||'').toLowerCase();
+        if(lbl.includes('station_id')||lbl.includes('station id'))sidIdx=i;
+        else if(lbl==='name'||lbl.includes('nosaukums'))nameIdx=i;
+      }
+    }
+    if(sidIdx<0)sidIdx=0;
+    if(nameIdx<0)nameIdx=1;
+    for(const row of (tLV.rows||[])){
+      const c=row.c;
+      if(!c||c.length<2)continue;
+      const sid=(c[sidIdx]&&c[sidIdx].v!=null)?String(c[sidIdx].v).trim():'';
+      const name=(c[nameIdx]&&c[nameIdx].v!=null)?String(c[nameIdx].v).trim():'';
+      if(sid&&name)lvStations[sid]=name;
+    }
+  }catch(e){console.warn('Läti jaamade laadimine ebaõnnestus:',e);}
+
+  // 3) Läti andmed: LIMEN (veetase) + WTEMD (veetemperatuur), 24h muudatus arvutatakse ise
+  // Aja parsimine - LV API tagastab "2026.04.26 06:00:00" formaadis
+  const parseDt=(raw)=>{
+    if(!raw)return 0;
+    let s=typeof raw==='string'?raw:String(raw);
+    s=s.trim();
+    const m=s.match(/^(\d{4})[.\-](\d{2})[.\-](\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if(m){
+      const t=Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]||'00'}Z`);
+      return isNaN(t)?0:t;
+    }
+    const t=Date.parse(s);
+    return isNaN(t)?0:t;
+  };
+
+  // Funktsioon parsib Läti tabeli ja tagastab jaamapõhise andmestruktuuri
+  const parseLVTable=(tLV)=>{
+    let sidIdx=-1, abbrIdx=-1, dtIdx=-1, valIdx=-1;
+    if(tLV.cols){
+      for(let i=0;i<tLV.cols.length;i++){
+        const lbl=(tLV.cols[i].label||tLV.cols[i].id||'').toLowerCase();
+        if(lbl.includes('station_id')||lbl.includes('station id'))sidIdx=i;
+        else if(lbl.includes('abbreviation'))abbrIdx=i;
+        else if(lbl.includes('datetime')||lbl.includes('time'))dtIdx=i;
+        else if(lbl==='value'||lbl.includes('vērtība'))valIdx=i;
+      }
+    }
+    if(sidIdx<0)sidIdx=0;
+    if(abbrIdx<0)abbrIdx=1;
+    if(dtIdx<0)dtIdx=2;
+    if(valIdx<0)valIdx=3;
+    const limenByStation={}, wtempByStation={};
+    for(const row of (tLV.rows||[])){
+      const c=row.c;
+      if(!c||c.length<4)continue;
+      const sid=(c[sidIdx]&&c[sidIdx].v!=null)?String(c[sidIdx].v).trim():'';
+      const abbr=(c[abbrIdx]&&c[abbrIdx].v!=null)?String(c[abbrIdx].v).trim().toUpperCase():'';
+      if(!sid)continue;
+      const val=num(c[valIdx]?c[valIdx].v:null);
+      if(val===null)continue;
+      const dtRaw=c[dtIdx]?c[dtIdx].v:'';
+      const ts=parseDt(dtRaw?(typeof dtRaw==='string'?dtRaw:String(dtRaw)):'');
+      if(abbr==='LIMEN'){
+        if(!limenByStation[sid])limenByStation[sid]=[];
+        limenByStation[sid].push({val,ts});
+      } else if(abbr==='WTEMD'){
+        if(!wtempByStation[sid])wtempByStation[sid]=[];
+        wtempByStation[sid].push({val,ts});
+      }
+    }
+    return {limenByStation, wtempByStation};
+  };
+
+  // Lae nii live (Latvia_Andmed) kui cache (Cache_LV) paralleelselt
+  let liveLV={limenByStation:{}, wtempByStation:{}};
+  let cacheLV={limenByStation:{}, wtempByStation:{}};
+  try{
+    const tLV=await fetchGvizJSON(GVIZ_LV_DATA);
+    liveLV=parseLVTable(tLV);
+  }catch(e){console.warn('Läti live laadimine ebaõnnestus:',e);}
+  try{
+    const tLV2=await fetchGvizJSON(GVIZ_CACHE_LV);
+    cacheLV=parseLVTable(tLV2);
+  }catch(e){console.warn('Läti cache laadimine ebaõnnestus:',e);}
+
+  // Kombineerime: live prioriteet, cache täidab puuduvad jaamad
+  // (mõlemast allikast jaamad pannakse kokku, näit per-station vali live kui olemas)
+  const allLVStations=new Set([
+    ...Object.keys(liveLV.limenByStation),
+    ...Object.keys(cacheLV.limenByStation)
+  ]);
+
+  try{
+    for(const sid of allLVStations){
+      // Kasuta live'i kui see jaam seal olemas, muidu cache
+      const limenSamples=liveLV.limenByStation[sid]||cacheLV.limenByStation[sid]||[];
+      const wtempSamples=liveLV.wtempByStation[sid]||cacheLV.wtempByStation[sid]||[];
+      const isCache=!liveLV.limenByStation[sid];
+
+      if(limenSamples.length===0)continue;
+      const samples=limenSamples.sort((a,b)=>b.ts-a.ts);
+      const latest=samples[0];
+      if(!latest)continue;
+
+      // Leia ~24h vanem näit (tolerants 4h)
+      const target=latest.ts-24*3600*1000;
+      let oldSample=null, bestDiff=Infinity;
+      for(const s of samples){
+        const diff=Math.abs(s.ts-target);
+        if(diff<bestDiff&&diff<4*3600*1000){
+          bestDiff=diff; oldSample=s;
+        }
+      }
+      const delta24=oldSample?(latest.val-oldSample.val):null;
+
+      // Uusim WTEMD samalt jaamalt
+      let waterT=null;
+      if(wtempSamples.length>0){
+        const wts=[...wtempSamples].sort((a,b)=>b.ts-a.ts);
+        waterT=wts[0].val;
+      }
+
+      const name=lvStations[sid]||sid;
+      const lvl=Math.round(latest.val);
+      const normName=normLV(name);
+      const river=LV_RIVERS_NORM[normName]
+        ||LV_RIVERS_NORM[normName.split(/[\s,]/)[0]]
+        ||LV_RIVERS[name.toLowerCase()]
+        ||LV_RIVERS[name.toLowerCase().split(/[\s,]/)[0]];
+      const veekoguDisplay=river?(river+' / '+name):name;
+      const fakeJaam=name+' (LV)';
+      const obj={level:lvl, jaam:fakeJaam, veekogu:veekoguDisplay, country:'LV',
+        lvSid:sid,
+        delta24:delta24!=null?Math.round(delta24*10)/10:null,
+        waterT:waterT!=null?Math.round(waterT*10)/10:null,
+        airT:null,
+        isCache:isCache};
+      liveData[fakeJaam.toLowerCase()]=obj;
+      allSt.push(obj);
+    }
+  }catch(e){console.warn('Läti andmete laadimine ebaõnnestus:',e);}
+
+  lupd=new Date().toISOString();
+}
+
+function findSt(jaaNimi){
+  const k=jaaNimi.toLowerCase();
+  if(liveData[k])return liveData[k];
+  for(const[key,v]of Object.entries(liveData)){
+    if(key.includes(k)||k.includes(key))return v;
+  }
+  return null;
+}
+
+async function refreshAll(){
+  if(busy)return;
+  busy=true;
+  const btn=document.getElementById('rbtn');
+  btn.disabled=true;btn.textContent='Laeb...';
+  document.getElementById('sdot').className='sdot loading';
+  document.getElementById('stxt').textContent='Laen andmeid...';
+  render();
+  try{
+    await Promise.all([loadDefaults(), loadCSV(), loadLoigud(), loadPunktid()]);
+    buildRivers();
+    lsSave();
+    const cnt=allSt.length;
+    const cacheCnt=allSt.filter(s=>s.isCache).length;
+    const txt=cacheCnt>0?`${cnt} jaama laetud (${cacheCnt} varuandmetest) · ${fmt(lupd)}`:`${cnt} jaama laetud · ${fmt(lupd)}`;
+    document.getElementById('stxt').textContent=txt;
+    document.getElementById('sdot').className='sdot';
+    document.getElementById('lupd').textContent=fmt(lupd);
+    filtSt=[...allSt];
+  }catch(e){
+    document.getElementById('stxt').textContent='Viga: '+e.message;
+    document.getElementById('sdot').className='sdot err';
+  }
+  busy=false;btn.disabled=false;btn.textContent='↻ Uuenda';
+  render();
+}
+
+function st(r){
+  if(r.level===null)return r.err?'low':'loading';
+  if(r.level>=r.absMax||r.level>=r.maxSafe)return 'danger';
+  if(r.level>=r.maxSafe*0.85)return 'warn';
+  if(r.level<r.kayakMin)return 'low';
+  return 'ok';
+}
+function slbl(r){
+  const s=st(r);
+  if(s==='loading')return['badge-loading','Laeb'];
+  if(s==='danger')return['badge-danger',r.level>=r.absMax?'Ohtlik':'Liiga kõrge'];
+  if(s==='warn')return['badge-warn','Kõrge'];
+  if(s==='low')return['badge-low',r.err?'Viga':'Madal'];
+  return['badge-ok','Sobiv'];
+}
+function bcol(r){const s=st(r);return s==='danger'?'#dc2626':s==='warn'?'#d97706':s==='low'?'#9ca3af':'#1a6b4a';}
+function pct(v,m){return Math.min(97,Math.round(v/m*100));}
+function spill(r,t){
+  const min=t==='k'?r.kayakMin:r.raftMin,lbl=t==='k'?'🛶 Kajak':'🚣 Rafting';
+  if(r.level===null)return`<span class="pill pill-off">${lbl}</span>`;
+  if(r.level>=r.absMax||r.level>=r.maxSafe)return`<span class="pill pill-danger">✕ ${lbl}</span>`;
+  if(r.level<min)return`<span class="pill pill-off">↓ ${lbl}</span>`;
+  if(r.level>=r.maxSafe*0.85)return`<span class="pill pill-warn">⚠ ${lbl}</span>`;
+  return`<span class="pill pill-on">✓ ${lbl}</span>`;
+}
+function fmt(iso){
+  if(!iso)return'—';
+  try{const d=new Date(iso);return d.toLocaleTimeString('et-EE',{hour:'2-digit',minute:'2-digit'})+' '+d.toLocaleDateString('et-EE');}catch(e){return iso;}
+}
+
+function renderCard(r){
+  const s=st(r),[bc,bl]=slbl(r),mx=r.absMax,bp=r.level!==null?Math.min(100,Math.round(r.level/mx*100)):0,ed=editId===r.id;
+  return`<div class="card ${s}">
+    <div class="card-head">
+      <div><div class="card-title">${r.country==='LV'?'🇱🇻 ':(r.country==='EE'?'🇪🇪 ':'')}${r.jogi}</div><div class="card-sub">${r.stJaam||r.jaam}</div></div>
+      <span class="badge ${bc}">${bl}</span>
+    </div>
+    <div class="level-big">
+      ${r.level!==null?`<span class="level-num">${r.level}</span><span class="level-unit">cm</span>`:`<span class="level-na">${busy?'···':'?'}</span>`}
+    </div>
+    ${r.err?`<div class="err-txt">⚠ ${r.err}</div>`:''}
+    <div class="bar-track">
+      <div class="bar-fill" style="width:${bp}%;background:${bcol(r)};"></div>
+      ${r.personalMin!=null?`<div class="bar-mk" style="left:${pct(r.personalMin,mx)}%;background:#7c3aed;height:18px;top:-6px;width:2px;"></div>
+      <span class="bar-lbl" style="left:${pct(r.personalMin,mx)}%;color:#7c3aed;font-weight:600;top:16px;">M</span>`:''}
+      <div class="bar-mk" style="left:${pct(r.kayakMin,mx)}%;background:#1a6b4a;"></div>
+      <span class="bar-lbl" style="left:${pct(r.kayakMin,mx)}%;">K</span>
+      <div class="bar-mk" style="left:${pct(r.raftMin,mx)}%;background:#2d7a55;"></div>
+      <span class="bar-lbl" style="left:${pct(r.raftMin,mx)}%;">R</span>
+      <div class="bar-mk" style="left:${pct(r.maxSafe,mx)}%;background:#dc2626;"></div>
+      <span class="bar-lbl" style="left:${pct(r.maxSafe,mx)}%;">!</span>
+    </div>
+    <div class="bar-ends"><span>0</span><span>${mx} cm</span></div>
+    ${(r.delta24!=null||r.waterT!=null||r.airT!=null)?`<div class="extras">
+      ${r.delta24!=null?`<span class="extra ${r.delta24>0?'up':(r.delta24<0?'down':'')}"><span class="ex-lbl">Δ24h</span><b>${r.delta24>0?'+':''}${r.delta24} cm</b></span>`:''}
+      ${r.waterT!=null?`<span class="extra"><span class="ex-lbl">💧 vesi</span><b>${r.waterT}°C</b></span>`:''}
+      ${r.airT!=null?`<span class="extra"><span class="ex-lbl">🌡 õhk</span><b>${r.airT}°C</b></span>`:''}
+    </div>`:''}
+    <div class="pills" style="margin-top:10px;">${spill(r,'k')}${spill(r,'r')}</div>
+    ${hasLoigud(r.jogi)?`<button class="vp-btn" style="margin-bottom:8px;width:100%;" onclick="openV('${(r.jogi||'').replace(/'/g,"\\'")}')">🗺️ Veepeale — vaata teekondi</button>`:''}
+    <button class="c-river-btn" onclick="openChat('${(r.jogi||'').replace(/'/g,"\\'")}')">💬 Vestlus</button>
+    ${r.isCache?`<div class="cache-tag">⏱ Vanad andmed (varuandmed)</div>`:''}
+    <div class="card-foot">
+      <span class="foot-src"><span class="fdot live"></span>KA · ${fmt(r.updated)}</span>
+      <div class="foot-btns">
+        <button class="ibtn" onclick="tog('${r.id}')">${ed?'✕':'⚙'}</button>
+        <button class="ibtn" onclick="del('${r.id}')">🗑</button>
+      </div>
+    </div>
+    ${ed?`<div class="sp">
+      <div class="sp-row"><label>Isiklik miinimum (cm)</label><input type="number" id="ep-${r.id}" value="${r.personalMin!=null?r.personalMin:''}" placeholder="(valikuline)"/></div>
+      <div class="sp-row"><label>Min kajak (cm)</label><input type="number" id="ek-${r.id}" value="${r.kayakMin}"/></div>
+      <div class="sp-row"><label>Min rafting (cm)</label><input type="number" id="er-${r.id}" value="${r.raftMin}"/></div>
+      <div class="sp-row"><label>Max ohutu (cm)</label><input type="number" id="em-${r.id}" value="${r.maxSafe}"/></div>
+      <div class="sp-row"><label>Absoluutne max</label><input type="number" id="ea-${r.id}" value="${r.absMax}"/></div>
+      <div style="margin-top:8px;"><button class="btn" style="font-size:12px;padding:5px 12px;" onclick="saveEd('${r.id}')">Salvesta</button></div>
+    </div>`:''}
+  </div>`;
+}
+
+function render(){
+  const g=document.getElementById('grid');if(!g)return;
+  if(rivers.length===0){
+    if(defaults.length>0){
+      g.innerHTML=`<div class="empty">Kõik vaikimisi jõed on kustutatud.<br><br><button class="btn" onclick="resetDefaults()" style="margin-top:8px;">🔄 Lähtesta vaikimisi nimekiri</button> või vajuta "+ Lisa jõgi"</div>`;
+    } else {
+      g.innerHTML=`<div class="empty">${allSt.length>0?'Lisa jõgi nupuga "+ Lisa jõgi"':busy?'Laeb...':'Andmed laetakse...'}</div>`;
+    }
+    return;
+  }
+  g.innerHTML=rivers.map(renderCard).join('');
+}
+
+function tog(id){editId=editId===id?null:id;render();}
+function saveEd(id){
+  const g=k=>parseInt(document.getElementById(k+id).value,10);
+  const[km,rm,ms,am]=[g('ek-'),g('er-'),g('em-'),g('ea-')];
+  if([km,rm,ms,am].some(isNaN))return;
+  const pmRaw=document.getElementById('ep-'+id).value.trim();
+  const pm=pmRaw===''?null:parseInt(pmRaw,10);
+  const pmFinal=(pm===null||isNaN(pm))?null:pm;
+  // Kui see on vaikimisi jõgi, salvesta muudatused customized'i
+  const r=rivers.find(rr=>rr.id===id);
+  if(r&&r.isDefault){
+    const {customized}=loadUserState();
+    const key=r.country+'__'+r.stJaam.replace(' (LV)','');
+    customized[key]={kayakMin:km,raftMin:rm,maxSafe:ms,absMax:am,personalMin:pmFinal};
+    saveCustomized(customized);
+  }
+  rivers=rivers.map(rr=>rr.id===id?{...rr,kayakMin:km,raftMin:rm,maxSafe:ms,absMax:am,personalMin:pmFinal}:rr);
+  editId=null;lsSave();render();
+}
+function del(id){
+  const r=rivers.find(rr=>rr.id===id);
+  if(!r)return;
+  if(!confirm('Kustuta?'))return;
+  if(r.isDefault){
+    // Vaikimisi jõe kustutamine — lisa kustutuste nimekirja
+    const {deleted}=loadUserState();
+    const key=r.country+'__'+r.stJaam.replace(' (LV)','');
+    if(!deleted.includes(key))deleted.push(key);
+    saveDeleted(deleted);
+  }
+  rivers=rivers.filter(rr=>rr.id!==id);
+  lsSave();render();
+}
+
+function filterSt(){
+  let q=(document.getElementById('ssrch').value||'').toLowerCase().trim();
+  const norm=s=>s.toLowerCase().replace(/[õö]/g,'o').replace(/[ä]/g,'a').replace(/[ü]/g,'u');
+  q=norm(q);
+  // Eemalda juba lisatud jaamad nimekirjast
+  const usedJaams=new Set(rivers.filter(r=>r.isLive&&r.stJaam).map(r=>r.stJaam));
+  const available=allSt.filter(s=>!usedJaams.has(s.jaam));
+  filtSt=q?available.filter(s=>norm(s.jaam).includes(q)||norm(s.veekogu).includes(q)):[...available];
+  // Kui ainult 1 tulemus, vali see automaatselt
+  if(q&&filtSt.length===1){
+    selSt=filtSt[0];
+    const el=document.getElementById('seli');
+    if(el)el.textContent=`✓ ${selSt.veekogu} / ${selSt.jaam} — ${selSt.level} cm`;
+  }
+  renderSt();
+}
+function renderSt(){
+  const el=document.getElementById('slist');if(!el)return;
+  if(filtSt.length===0){
+    el.innerHTML=`<div style="padding:9px 12px;font-size:12px;color:var(--text3);">${allSt.length===0?'Andmed laetakse...':'Ei leitud — proovi teist sõna'}</div>`;
+    return;
+  }
+  el.innerHTML=filtSt.map((s,i)=>{
+    const flag=s.country==='LV'?'🇱🇻 ':(s.country==='EE'?'🇪🇪 ':'');
+    return `<div class="si ${selSt&&selSt.jaam===s.jaam?'sel':''}" onclick="pickStByIdx(${i})">
+      <div>${flag}<b>${s.veekogu}</b></div>
+      <div class="si-sub">${s.jaam} · ${s.level} cm</div>
+    </div>`;
+  }).join('');
+}
+
+function pickStByIdx(idx){
+  selSt=filtSt[idx];
+  renderSt();
+  const el=document.getElementById('seli');
+  if(el&&selSt)el.textContent=`✓ ${selSt.veekogu} / ${selSt.jaam} — ${selSt.level} cm`;
+}
+
+function openM(){
+  selSt=null;
+  document.getElementById('modal').classList.add('open');
+  document.getElementById('ssrch').value='';
+  // Eemalda juba lisatud jaamad
+  const usedJaams=new Set(rivers.filter(r=>r.isLive&&r.stJaam).map(r=>r.stJaam));
+  filtSt=allSt.filter(s=>!usedJaams.has(s.jaam));
+  renderSt();
+  const el=document.getElementById('seli');
+  if(el)el.textContent=filtSt.length>0?`${filtSt.length} jaama saadaval — vajuta ühele`:'Kõik jaamad on juba lisatud';
+}
+function closeM(){document.getElementById('modal').classList.remove('open');selSt=null;}
+function addR(){
+  const err=document.getElementById('merr');err.style.display='none';
+  if(!selSt){err.textContent='Palun vali jaam nimekirjast (vajuta sellele).';err.style.display='block';return;}
+  const ppmVal=parseInt(document.getElementById('ppm').value);
+  rivers.push({id:String(Date.now()),jogi:selSt.veekogu,jaam:selSt.jaam,stJaam:selSt.jaam,isLive:true,
+    country:selSt.country||'EE',
+    level:selSt.level,kayakMin:parseInt(document.getElementById('pkm').value)||40,
+    raftMin:parseInt(document.getElementById('prm').value)||60,
+    maxSafe:parseInt(document.getElementById('pms').value)||150,
+    absMax:parseInt(document.getElementById('pam').value)||200,
+    personalMin:isNaN(ppmVal)?null:ppmVal,
+    delta24:selSt.delta24!=null?selSt.delta24:null,
+    waterT:selSt.waterT!=null?selSt.waterT:null,
+    airT:selSt.airT!=null?selSt.airT:null,
+    updated:lupd,err:null});
+  lsSave();closeM();render();
+}
+
+function exportSettings(){
+  // Tekstina ilus tabel mille saab Sheetsi/ehitajale saata
+  const lines=['Jogi\tJaam\tRiik\tMinKajak\tMinRaft\tMaxOhutu\tAbsMax\tIsiklikMin\tJarjekord\tAktiivne'];
+  rivers.forEach((r,i)=>{
+    lines.push([
+      r.jogi||'',
+      r.stJaam||r.jaam||'',
+      r.country||'EE',
+      r.kayakMin||'',
+      r.raftMin||'',
+      r.maxSafe||'',
+      r.absMax||'',
+      r.personalMin!=null?r.personalMin:'',
+      i+1,
+      'jah'
+    ].join('\t'));
+  });
+  const txt=lines.join('\n');
+  document.getElementById('etext').value=txt;
+  document.getElementById('emodal').classList.add('open');
+  document.getElementById('cpybtn').textContent='📋 Kopeeri';
+}
+function closeE(){document.getElementById('emodal').classList.remove('open');}
+function copyE(){
+  const ta=document.getElementById('etext');
+  ta.select();
+  ta.setSelectionRange(0,99999);
+  try{
+    navigator.clipboard.writeText(ta.value).then(()=>{
+      document.getElementById('cpybtn').textContent='✓ Kopeeritud!';
+      setTimeout(()=>{document.getElementById('cpybtn').textContent='📋 Kopeeri';},2000);
+    }).catch(()=>{
+      document.execCommand('copy');
+      document.getElementById('cpybtn').textContent='✓ Kopeeritud!';
+      setTimeout(()=>{document.getElementById('cpybtn').textContent='📋 Kopeeri';},2000);
+    });
+  }catch(e){
+    document.execCommand('copy');
+    document.getElementById('cpybtn').textContent='✓ Kopeeritud!';
+    setTimeout(()=>{document.getElementById('cpybtn').textContent='📋 Kopeeri';},2000);
+  }
+}
+
+// Lae sinu vaikimisi jõed Sheetsist (Joed_loend vaheleht)
+async function loadDefaults(){
+  defaults=[];
+  try{
+    const t=await fetchGvizJSON(GVIZ_DEFAULTS);
+    if(!t.cols||!t.rows)return;
+    // Tuvasta veerud labeli järgi
+    let jogiIdx=-1, jaamIdx=-1, riikIdx=-1, kmIdx=-1, rmIdx=-1, msIdx=-1, amIdx=-1, pmIdx=-1, jrIdx=-1, akIdx=-1;
+    for(let i=0;i<t.cols.length;i++){
+      const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
+      if(lbl.includes('jogi')||lbl.includes('jõgi'))jogiIdx=i;
+      else if(lbl.includes('jaam'))jaamIdx=i;
+      else if(lbl.includes('riik'))riikIdx=i;
+      else if(lbl.includes('minkajak'))kmIdx=i;
+      else if(lbl.includes('minraft'))rmIdx=i;
+      else if(lbl.includes('maxohutu'))msIdx=i;
+      else if(lbl.includes('absmax'))amIdx=i;
+      else if(lbl.includes('isiklik'))pmIdx=i;
+      else if(lbl.includes('jarjekord')||lbl.includes('järjekord'))jrIdx=i;
+      else if(lbl.includes('aktiivne'))akIdx=i;
+    }
+    const num=(c)=>{if(!c||c.v==null)return null;const v=typeof c.v==='number'?c.v:parseFloat(String(c.v).replace(',','.'));return isNaN(v)?null:v;};
+    const str=(c)=>(c&&c.v!=null)?String(c.v).trim():'';
+    for(const row of t.rows){
+      const c=row.c;if(!c)continue;
+      const aktiivne=akIdx>=0?str(c[akIdx]).toLowerCase():'jah';
+      if(aktiivne==='ei'||aktiivne==='no'||aktiivne==='0')continue;
+      const jogi=str(c[jogiIdx>=0?jogiIdx:0]);
+      const jaam=str(c[jaamIdx>=0?jaamIdx:1]);
+      if(!jogi&&!jaam)continue;
+      defaults.push({
+        jogi, jaam,
+        country:str(c[riikIdx>=0?riikIdx:2]).toUpperCase()||'EE',
+        kayakMin:num(c[kmIdx])||40,
+        raftMin:num(c[rmIdx])||60,
+        maxSafe:num(c[msIdx])||150,
+        absMax:num(c[amIdx])||200,
+        personalMin:num(c[pmIdx]),
+        order:num(c[jrIdx])||999
+      });
+    }
+    defaults.sort((a,b)=>a.order-b.order);
+  }catch(e){console.warn('Vaikimisi nimekirja laadimine ebaõnnestus:',e);}
+}
+
+// Loe localStoragest kasutaja kustutused ja muudatused
+// Lae lõigud Sheetsist
+async function loadLoigud(){
+  loigud=[];
+  try{
+    const t=await fetchGvizJSON(GVIZ_LOIGUD);
+    if(!t.cols||!t.rows)return;
+    let jogiIdx=-1, idIdx=-1, nimiIdx=-1, algusIdx=-1, loppIdx=-1, pikkusIdx=-1, raskIdx=-1, markIdx=-1;
+    for(let i=0;i<t.cols.length;i++){
+      const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
+      if(jogiIdx<0&&(lbl.includes('jogi')||lbl.includes('jõgi')))jogiIdx=i;
+      else if(idIdx<0&&(lbl.includes('loikid')||lbl.includes('lõikid')))idIdx=i;
+      else if(nimiIdx<0&&(lbl.includes('loikunimi')||lbl.includes('lõikunimi')||lbl.includes('nimi')))nimiIdx=i;
+      else if(algusIdx<0&&lbl.includes('algus'))algusIdx=i;
+      else if(loppIdx<0&&(lbl.includes('lopp')||lbl.includes('lõpp')))loppIdx=i;
+      else if(pikkusIdx<0&&lbl.includes('pikkus'))pikkusIdx=i;
+      else if(raskIdx<0&&lbl.includes('rask'))raskIdx=i;
+      else if(markIdx<0&&(lbl.includes('mark')||lbl.includes('märk')))markIdx=i;
+    }
+    const str=(c)=>(c&&c.v!=null)?String(c.v).trim():'';
+    const numv=(c)=>{if(!c||c.v==null)return null;const v=typeof c.v==='number'?c.v:parseFloat(String(c.v).replace(',','.'));return isNaN(v)?null:v;};
+    for(const row of t.rows){
+      const c=row.c;if(!c)continue;
+      const jogi=str(c[jogiIdx>=0?jogiIdx:0]);
+      const id=str(c[idIdx>=0?idIdx:1]);
+      if(!jogi||!id)continue;
+      loigud.push({
+        jogi, id,
+        nimi:str(c[nimiIdx>=0?nimiIdx:2]),
+        algus:parseCoords(str(c[algusIdx>=0?algusIdx:3])),
+        lopp:parseCoords(str(c[loppIdx>=0?loppIdx:4])),
+        pikkus:numv(c[pikkusIdx>=0?pikkusIdx:5]),
+        raskus:str(c[raskIdx>=0?raskIdx:6]),
+        markused:str(c[markIdx>=0?markIdx:7])
+      });
+    }
+  }catch(e){console.warn('Lõikude laadimine ebaõnnestus:',e);}
+}
+
+// Lae punktid Sheetsist
+async function loadPunktid(){
+  punktid=[];
+  try{
+    const t=await fetchGvizJSON(GVIZ_PUNKTID);
+    if(!t.cols||!t.rows)return;
+    let jogiIdx=-1, lidIdx=-1, tyypIdx=-1, nimiIdx=-1, koorIdx=-1, markIdx=-1;
+    for(let i=0;i<t.cols.length;i++){
+      const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
+      if(jogiIdx<0&&(lbl.includes('jogi')||lbl.includes('jõgi')))jogiIdx=i;
+      else if(lidIdx<0&&(lbl.includes('loikid')||lbl.includes('lõikid')))lidIdx=i;
+      else if(tyypIdx<0&&(lbl.includes('tyyp')||lbl.includes('tüüp')))tyypIdx=i;
+      else if(nimiIdx<0&&lbl.includes('nimi'))nimiIdx=i;
+      else if(koorIdx<0&&(lbl.includes('koord')||lbl.includes('kord')))koorIdx=i;
+      else if(markIdx<0&&(lbl.includes('mark')||lbl.includes('märk')))markIdx=i;
+    }
+    const str=(c)=>(c&&c.v!=null)?String(c.v).trim():'';
+    for(const row of t.rows){
+      const c=row.c;if(!c)continue;
+      const jogi=str(c[jogiIdx>=0?jogiIdx:0]);
+      const lid=str(c[lidIdx>=0?lidIdx:1]);
+      if(!jogi)continue;
+      const koor=parseCoords(str(c[koorIdx>=0?koorIdx:4]));
+      if(!koor)continue;
+      punktid.push({
+        jogi, loikId:lid,
+        tyyp:str(c[tyypIdx>=0?tyypIdx:2]).toLowerCase(),
+        nimi:str(c[nimiIdx>=0?nimiIdx:3]),
+        koor,
+        markused:str(c[markIdx>=0?markIdx:5])
+      });
+    }
+  }catch(e){console.warn('Punktide laadimine ebaõnnestus:',e);}
+}
+
+function loadUserState(){
+  let deleted=[], customized={};
+  try{const r=localStorage.getItem(SK_DELETED);if(r)deleted=JSON.parse(r);}catch(e){}
+  try{const r=localStorage.getItem(SK_CUSTOMIZED);if(r)customized=JSON.parse(r);}catch(e){}
+  return {deleted, customized};
+}
+function saveDeleted(arr){try{localStorage.setItem(SK_DELETED,JSON.stringify(arr));}catch(e){}}
+function saveCustomized(obj){try{localStorage.setItem(SK_CUSTOMIZED,JSON.stringify(obj));}catch(e){}}
+
+// Ehita rivers nimekiri: vaikimisi (välja arvatud kustutatud) + kasutaja lisatud (ei ole defaults nimekirjas)
+function buildRivers(){
+  const {deleted, customized}=loadUserState();
+  const newRivers=[];
+  // 1) Lisa vaikimisi jõed (välja arvatud kasutaja kustutatud)
+  for(const d of defaults){
+    const key=d.country+'__'+d.jaam;
+    if(deleted.includes(key))continue;
+    // Kasuta kasutaja muudatusi kui need on
+    const custom=customized[key]||{};
+    const m=d.country==='LV'?findSt(d.jaam+' (LV)')||findSt(d.jaam):findSt(d.jaam);
+    newRivers.push({
+      id:'def_'+key,
+      isDefault:true,
+      jogi:d.jogi,
+      jaam:m?m.jaam:(d.country==='LV'?d.jaam+' (LV)':d.jaam),
+      stJaam:m?m.jaam:(d.country==='LV'?d.jaam+' (LV)':d.jaam),
+      isLive:true,
+      country:d.country,
+      level:m?m.level:null,
+      kayakMin:custom.kayakMin!=null?custom.kayakMin:d.kayakMin,
+      raftMin:custom.raftMin!=null?custom.raftMin:d.raftMin,
+      maxSafe:custom.maxSafe!=null?custom.maxSafe:d.maxSafe,
+      absMax:custom.absMax!=null?custom.absMax:d.absMax,
+      personalMin:custom.personalMin!==undefined?custom.personalMin:d.personalMin,
+      delta24:m?m.delta24:null,
+      waterT:m?m.waterT:null,
+      airT:m?m.airT:null,
+      isCache:m?!!m.isCache:false,
+      lvSid:m?m.lvSid:null,
+      updated:lupd,
+      err:m?null:'Jaama ei leitud'
+    });
+  }
+  // 2) Lisa kasutaja enda lisatud jõed (need on lsLoad-st)
+  const userRivers=lsLoad()||[];
+  // Filtreeri välja need, mis on tegelikult sinu defaults nimekirjas JA kuvatud (mitte kustutatud)
+  // Selleks vaatame, mis jaamad on hetkel newRivers-is (need on aktiivsed defaults)
+  const activeDefaultJaams=new Set(newRivers.filter(r=>r.isDefault).map(r=>r.stJaam));
+  for(const r of userRivers){
+    if(r.isDefault)continue;
+    // Jäta vahele ainult siis, kui sama jaam on juba kuvatud defaults-st (vältida duplikaate)
+    if(r.isLive&&activeDefaultJaams.has(r.stJaam))continue;
+    // Värskenda live andmed
+    if(r.isLive&&r.stJaam){
+      const m=findSt(r.stJaam);
+      if(m){r.level=m.level;r.delta24=m.delta24;r.waterT=m.waterT;r.airT=m.airT;r.isCache=!!m.isCache;r.lvSid=m.lvSid||r.lvSid;r.country=m.country||r.country;r.updated=lupd;r.err=null;}
+      else r.err='Jaama ei leitud';
+    }
+    newRivers.push({...r,id:String(r.id),err:r.err||null});
+  }
+  rivers=newRivers;
+}
+
+// Lähtesta vaikimisi nimekiri (kustutab kõik kasutaja kustutused ja muudatused)
+function resetDefaults(){
+  if(!confirm('Lähtesta nimekiri vaikimisi olekusse?\n\nSee taastab kõik vaikimisi jõed (kui olid kustutanud) ja eemaldab sinu muudatused vaikimisi jõgede piirides.\n\nSinu enda lisatud jõed jäävad alles.'))return;
+  saveDeleted([]);
+  saveCustomized({});
+  buildRivers();
+  lsSave();
+  render();
+}
+
+// =============== VEEPEALE MODAL ===============
+
+// Tagastab true, kui sellele jõele on Sheets'is lõike
+function hasLoigud(jogi){
+  if(!jogi)return false;
+  const j=jogi.toLowerCase();
+  return loigud.some(l=>l.jogi.toLowerCase()===j);
+}
+
+// Avage Veepeale modaali kindlale jõele
+function openV(jogi){
+  activeLoik=null;
+  // Leia jõe lõigud
+  const j=jogi.toLowerCase();
+  const myLoigud=loigud.filter(l=>l.jogi.toLowerCase()===j);
+  if(myLoigud.length===0){
+    alert('Sellel jõel pole hetkel lõike sisestatud.');
+    return;
+  }
+  document.getElementById('vp-title').textContent='🗺️ '+jogi;
+  document.getElementById('vp-sub').textContent=myLoigud.length+' lõik'+(myLoigud.length>1?'u':'')+' · '+punktid.filter(p=>p.jogi.toLowerCase()===j).length+' punkti';
+  // Tabid lõikude kaupa
+  const tabsEl=document.getElementById('vp-tabs');
+  tabsEl.innerHTML=myLoigud.map((l,i)=>`<button class="vp-tab ${i===0?'active':''}" onclick="selectLoik('${l.id}')">${l.id}: ${l.nimi||l.id}</button>`).join('');
+  // Vali esimene
+  selectLoik(myLoigud[0].id);
+  document.getElementById('vmodal').classList.add('open');
+}
+
+function closeV(){
+  document.getElementById('vmodal').classList.remove('open');
+  stopGps();
+  if(vMap){
+    vMap.remove();
+    vMap=null;
+  }
+  activeLoik=null;
+}
+
+// Vali konkreetne lõik kuvamiseks
+function selectLoik(loikId){
+  const l=loigud.find(ll=>ll.id===loikId);
+  if(!l)return;
+  activeLoik=l;
+  // Aktiveeri tab
+  document.querySelectorAll('.vp-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.vp-tab').forEach(t=>{if(t.textContent.startsWith(loikId+':'))t.classList.add('active');});
+  // Render content
+  renderLoik(l);
+}
+
+// Render lõigu sisu (info + kaart + kontakt)
+function renderLoik(l){
+  const myPunktid=punktid.filter(p=>p.jogi.toLowerCase()===l.jogi.toLowerCase()&&p.loikId===l.id);
+  const tyypIcons={
+    'veeskamine':'🚤','valjavotmine':'🏁','laager':'🏕️','vaatamisvaarsus':'👁️','oht':'⚠️'
+  };
+  const tyypNames={
+    'veeskamine':'Veeskamine','valjavotmine':'Väljavõtmine','laager':'Laager','vaatamisvaarsus':'Vaatamisväärsus','oht':'Oht'
+  };
+  // HTML
+  let html='';
+  // Info pillid + tegevuste nupud
+  html+='<div class="vp-loik-info">';
+  if(l.pikkus)html+=`<span class="vp-info-pill">📏 <b>${l.pikkus} km</b></span>`;
+  if(l.raskus)html+=`<span class="vp-info-pill">⚡ <b>${l.raskus}</b></span>`;
+  html+=`<span class="vp-info-pill">📍 <b>${myPunktid.length} punkti</b></span>`;
+  html+=`<button class="vp-btn" style="margin-left:auto;" onclick="openGraph('${(l.jogi||'').replace(/'/g,"\\\\'")}', ${l.algus?l.algus[0]:'null'}, ${l.algus?l.algus[1]:'null'})">📊 Graafik</button>`;
+  html+='</div>';
+  // Märkused
+  if(l.markused)html+=`<div class="vp-loik-mark">${l.markused}</div>`;
+  // Legend
+  const usedTypes=new Set(myPunktid.map(p=>p.tyyp));
+  if(usedTypes.size>0){
+    html+='<div class="vp-legend">';
+    for(const t of usedTypes){
+      html+=`<span class="vp-legend-item">${tyypIcons[t]||'📍'} ${tyypNames[t]||t}</span>`;
+    }
+    html+='</div>';
+  }
+  // Kaart (koos GPS nupuga)
+  html+='<div style="position:relative;"><div id="vmap"></div><div class="gps-controls"><button id="gps-btn" onclick="toggleGps()">📍 Mu asukoht</button></div><div id="gps-info" class="gps-info" style="display:none;"></div></div>';
+  // Ilmaprognoosi paneel (täidetakse asünkroonselt)
+  html+='<div id="weather-panel" class="weather-panel">⏳ Laen ilmaprognoosi...</div>';
+  // Kontaktinfo plokk (Veeretked.ee)
+  html+=`<div class="vp-contact">
+    <div class="vp-contact-title">🚣 Soovid sellele lõigule matka?</div>
+    <div class="vp-contact-features">
+      <span>Paadid ja varustus</span>
+      <span>Transport</span>
+      <span>Juhendaja</span>
+      <span>Toitlustus</span>
+    </div>
+    <div class="vp-contact-actions">
+      <a href="mailto:info@veeretked.ee?subject=Päring: ${encodeURIComponent(l.jogi+' / '+l.nimi)}" class="vp-contact-btn primary">📧 Saada päring</a>
+      <a href="https://veeretked.ee" target="_blank" rel="noopener" class="vp-contact-btn">🌐 veeretked.ee</a>
+    </div>
+  </div>`;
+  document.getElementById('vp-content').innerHTML=html;
+  // Initialize map
+  setTimeout(()=>initLoikMap(l, myPunktid), 80);
+  // Lae ilmaprognoos (asünkr.)
+  if(l.algus){
+    fetchWeather(l.algus[0], l.algus[1]).then(w=>renderWeather(w));
+  } else {
+    document.getElementById('weather-panel').textContent='Lõigule pole määratud algus-koordinaate';
+  }
+}
+
+// Renderda ilmaprognoosi paneel
+function renderWeather(w){
+  const panel=document.getElementById('weather-panel');
+  if(!panel)return;
+  if(!w||!w.current){
+    panel.textContent='⚠️ Ilmaprognoosi ei õnnestunud laadida';
+    return;
+  }
+  const cur=w.current;
+  const [emoji, desc]=weatherDesc(cur.weather_code);
+  const wind=cur.wind_speed_10m;
+  const windDir=cur.wind_direction_10m;
+  const windText=windDirText(windDir);
+  // Praegune ilm
+  let html=`<div class="wp-current">
+    <div class="wp-cur-main">
+      <span class="wp-cur-emoji">${emoji}</span>
+      <div>
+        <div class="wp-cur-temp">${Math.round(cur.temperature_2m)}°C</div>
+        <div class="wp-cur-desc">${desc}</div>
+      </div>
+    </div>
+    <div class="wp-cur-side">
+      <div class="wp-side-item" title="Tuule kiirus ja suund">
+        <div class="wp-side-lbl">💨 Tuul</div>
+        <div class="wp-side-val">${wind.toFixed(1)} m/s ${windText}<span class="wp-arrow" style="transform:rotate(${(windDir||0)+180}deg);">↑</span></div>
+      </div>
+      <div class="wp-side-item">
+        <div class="wp-side-lbl">🌧️ Sajud</div>
+        <div class="wp-side-val">${cur.precipitation.toFixed(1)} mm</div>
+      </div>
+    </div>
+  </div>`;
+  // 5-päeva prognoos
+  if(w.daily&&w.daily.time){
+    html+='<div class="wp-forecast">';
+    const days=Math.min(5, w.daily.time.length);
+    for(let i=0;i<days;i++){
+      const d=new Date(w.daily.time[i]);
+      const dayName=i===0?'Täna':(i===1?'Homme':['P','E','T','K','N','R','L'][d.getDay()]);
+      const [em]=weatherDesc(w.daily.weather_code[i]);
+      const tmax=Math.round(w.daily.temperature_2m_max[i]);
+      const tmin=Math.round(w.daily.temperature_2m_min[i]);
+      const prec=w.daily.precipitation_sum[i];
+      const wmax=w.daily.wind_speed_10m_max[i];
+      html+=`<div class="wp-day">
+        <div class="wp-day-name">${dayName}</div>
+        <div class="wp-day-emoji">${em}</div>
+        <div class="wp-day-temp"><b>${tmax}°</b><span>${tmin}°</span></div>
+        <div class="wp-day-prec">${prec>0?prec.toFixed(1)+' mm':'—'}</div>
+        <div class="wp-day-wind" title="Maksimaalne tuule kiirus">💨 ${wmax.toFixed(0)} m/s</div>
+      </div>`;
+    }
+    html+='</div>';
+  }
+  panel.innerHTML=html;
+  panel.classList.add('loaded');
+}
+
+// =============== GRAAFIK MODAL ===============
+
+async function openGraph(jogi, lat, lng){
+  document.getElementById('g-title').textContent='📊 '+jogi;
+  document.getElementById('g-sub').textContent='Veetase, ilm ja sajud';
+  document.getElementById('g-content').innerHTML='⏳ Laen andmeid...';
+  document.getElementById('gmodal').classList.add('open');
+  // Leia jõgi rivers-ist (ajaloo jaoks)
+  const r=rivers.find(rr=>rr.jogi===jogi);
+  // Lae kõik vajalik paralleelselt
+  const [w, hist]=await Promise.all([
+    (lat&&lng)?fetchWeather(lat, lng):Promise.resolve(null),
+    fetchHistory()
+  ]);
+  // Leia ajalugu sellele jõele
+  let history=[];
+  if(r){
+    history=getHistoryFor(r);
+  }
+  renderGraph(w, history, r);
+}
+
+function closeGraph(){
+  document.getElementById('gmodal').classList.remove('open');
+}
+
+function renderGraph(w, history, river){
+  const el=document.getElementById('g-content');
+  if(!el)return;
+  let html='';
+
+  // 1) Veetaseme ajaloo graafik
+  if(history&&history.length>=2){
+    const last=history[history.length-1];
+    const first=history[0];
+    const days=Math.round((last.ts-first.ts)/(24*3600*1000));
+    const minLvl=Math.min(...history.map(h=>h.lvl));
+    const maxLvl=Math.max(...history.map(h=>h.lvl));
+    const range=Math.max(5, maxLvl-minLvl);
+    const w0=600, h0=120;
+    let path='', dots='';
+    for(let i=0;i<history.length;i++){
+      const x=(i/(history.length-1||1))*w0;
+      const y=h0-((history[i].lvl-minLvl)/range)*(h0-20)-10;
+      path+=(i===0?'M':' L')+x.toFixed(1)+','+y.toFixed(1);
+      // Punkt iga 5. näit
+      if(i%Math.max(1, Math.floor(history.length/15))===0||i===history.length-1){
+        dots+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="#2d5a3d"/>`;
+      }
+    }
+    // Visuaalsed sõlmed: praegune tase, min/max
+    const trend=last.lvl-first.lvl;
+    const trendIcon=trend>2?'📈':(trend<-2?'📉':'➡️');
+    const trendText=trend>0?`+${trend} cm`:`${trend} cm`;
+    html+=`<div class="g-section">
+      <div class="g-section-title">📈 Veetase — viimased ${days} päeva ${trendIcon} <span style="color:${trend>0?'#1a6b4a':(trend<0?'#9a4e00':'#6b6660')};">${trendText}</span></div>
+      <div class="g-water">
+        <svg viewBox="0 0 ${w0} ${h0}" preserveAspectRatio="none" style="width:100%;height:120px;">
+          <path d="${path}" stroke="#2d5a3d" stroke-width="2" fill="none"/>
+          ${dots}
+        </svg>
+        <div class="g-water-axis">
+          <span style="left:0;">${new Date(first.ts).toLocaleDateString('et-EE',{day:'numeric',month:'short'})}</span>
+          <span style="left:50%;transform:translateX(-50%);">${new Date(history[Math.floor(history.length/2)].ts).toLocaleDateString('et-EE',{day:'numeric',month:'short'})}</span>
+          <span style="right:0;">${new Date(last.ts).toLocaleDateString('et-EE',{day:'numeric',month:'short'})}</span>
+        </div>
+      </div>
+      <div class="g-water-info">
+        <span><b>Praegu:</b> ${last.lvl} cm</span>
+        <span><b>Madalaim:</b> ${minLvl} cm</span>
+        <span><b>Kõrgeim:</b> ${maxLvl} cm</span>
+        <span><b>Mõõdetud:</b> ${history.length} korda</span>
+      </div>
+    </div>`;
+  } else if(history&&history.length===1){
+    html+=`<div class="g-section">
+      <div class="g-section-title">📈 Veetase</div>
+      <div class="g-note">Ajalugu kogume alates eelmisest tunnist — graafiku jaoks vaja vähemalt 2 mõõtmist. Tule mõne tunni pärast tagasi!</div>
+    </div>`;
+  } else {
+    html+=`<div class="g-section">
+      <div class="g-section-title">📈 Veetase</div>
+      <div class="g-note">Sellele jaamale pole veel ajalugu kogutud või jaama ajalugu pole kättesaadav. Kogume seda iga tund — peagi tekib graafik.</div>
+    </div>`;
+  }
+
+  // 2) Ilmaprognoos: 48h sajud
+  if(w&&w.hourly&&w.hourly.time){
+    const hours=Math.min(48, w.hourly.time.length);
+    const times=w.hourly.time.slice(0,hours);
+    const temps=w.hourly.temperature_2m.slice(0,hours);
+    const precs=w.hourly.precipitation.slice(0,hours);
+    const winds=w.hourly.wind_speed_10m.slice(0,hours);
+    const maxPrec=Math.max(2, ...precs);
+    const maxTemp=Math.max(...temps);
+    const minTemp=Math.min(...temps);
+    const tempRange=Math.max(5, maxTemp-minTemp);
+    const maxWind=Math.max(5, ...winds);
+
+    // Sajude graafik
+    let precHtml='<div class="g-section"><div class="g-section-title">🌧️ Sajud (mm/h) — 48h kogusumma: <b>'+precs.reduce((a,b)=>a+b,0).toFixed(1)+' mm</b></div><div class="g-bars">';
+    for(let i=0;i<hours;i++){
+      const h=Math.max(2, (precs[i]/maxPrec)*60);
+      const d=new Date(times[i]);
+      const isNewDay=i>0&&d.getDate()!==new Date(times[i-1]).getDate();
+      const cls=isNewDay?'g-bar new-day':'g-bar';
+      const color=precs[i]>5?'#dc2626':(precs[i]>1?'#3b82f6':'#a3c4ee');
+      precHtml+=`<div class="${cls}" title="${d.getHours()}:00 — ${precs[i].toFixed(1)} mm"><div class="g-bar-fill" style="height:${h}px;background:${color};"></div></div>`;
+    }
+    precHtml+='</div><div class="g-axis">';
+    for(let i=0;i<hours;i+=6){
+      const d=new Date(times[i]);
+      const lbl=d.getHours()===0?(['P','E','T','K','N','R','L'][d.getDay()]):d.getHours()+'h';
+      precHtml+=`<span class="g-axis-lbl" style="left:${(i/hours)*100}%;">${lbl}</span>`;
+    }
+    precHtml+='</div></div>';
+    html+=precHtml;
+
+    // Temperatuur
+    let tempHtml='<div class="g-section"><div class="g-section-title">🌡️ Temperatuur (°C)</div><div class="g-line">';
+    const w0=600, h0=80;
+    let path='';
+    for(let i=0;i<hours;i++){
+      const x=(i/(hours-1))*w0;
+      const y=h0-((temps[i]-minTemp)/tempRange)*(h0-10)-5;
+      path+=(i===0?'M':' L')+x.toFixed(1)+','+y.toFixed(1);
+    }
+    tempHtml+=`<svg viewBox="0 0 ${w0} ${h0}" preserveAspectRatio="none" style="width:100%;height:80px;">
+      <path d="${path}" stroke="#d97706" stroke-width="2" fill="none"/>
+    </svg></div>
+    <div class="g-axis">
+      <span class="g-axis-lbl" style="left:0;">${Math.round(temps[0])}°</span>
+      <span class="g-axis-lbl" style="left:50%;">${Math.round(temps[Math.floor(hours/2)])}°</span>
+      <span class="g-axis-lbl" style="left:100%;">${Math.round(temps[hours-1])}°</span>
+    </div>
+    <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:2px;">Vahemik: ${Math.round(minTemp)}° kuni ${Math.round(maxTemp)}°</div>
+    </div>`;
+    html+=tempHtml;
+
+    // Tuul
+    let windHtml='<div class="g-section"><div class="g-section-title">💨 Tuul (m/s)</div><div class="g-bars">';
+    for(let i=0;i<hours;i++){
+      const h=Math.max(2, (winds[i]/maxWind)*60);
+      const d=new Date(times[i]);
+      const dir=w.hourly.wind_direction_10m?w.hourly.wind_direction_10m[i]:0;
+      const color=winds[i]>=10?'#dc2626':(winds[i]>=6?'#d97706':'#5a8a73');
+      const dirText=windDirText(dir);
+      windHtml+=`<div class="g-bar" title="${d.getHours()}:00 — ${winds[i].toFixed(1)} m/s ${dirText}"><div class="g-bar-fill" style="height:${h}px;background:${color};"></div></div>`;
+    }
+    windHtml+='</div></div>';
+    html+=windHtml;
+  }
+
+  el.innerHTML=html||'⚠️ Andmeid ei õnnestunud laadida';
+}
+// Initialize Leaflet map
+// Cache jõejoonte jaoks (et ei tõmmataks iga avamise korral uuesti)
+const routeCache={};
+// Cache ilmaprognoosi jaoks (15 min kehtivus)
+const weatherCache={};
+// Cache veetaseme ajaloo jaoks (jaama nime/sid järgi)
+let historyCacheEE=null, historyCacheLV=null, historyLoadedTs=0;
+
+// Lae veetaseme ajalugu (Cache_EE või Cache_LV) - jaamapõhiselt grupp
+async function fetchHistory(){
+  // Cache 5 min kehtivusega
+  if(historyCacheEE&&historyCacheLV&&(Date.now()-historyLoadedTs)<5*60*1000){
+    return {ee:historyCacheEE, lv:historyCacheLV};
+  }
+  const ee={}, lv={};
+
+  // Universaalne aja parser - käsitleb kõiki gviz formaadeid
+  const parseTs=(raw)=>{
+    if(raw==null)return 0;
+    // 1) Date objekt (kõige tõenäolisem)
+    if(raw instanceof Date)return raw.getTime();
+    // 2) Number (timestamp millisekundites)
+    if(typeof raw==='number')return raw;
+    const s=String(raw);
+    // 3) "Date(2026,3,28,12,36,40)" stringina (kuu on 0-indekseeritud!)
+    let m=s.match(/Date\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/);
+    if(m){
+      return new Date(+m[1], +m[2], +m[3], +m[4], +m[5], +m[6]).getTime();
+    }
+    // 4) "Date(2026,3,28)" lühem variant
+    m=s.match(/Date\((\d+),(\d+),(\d+)\)/);
+    if(m){
+      return new Date(+m[1], +m[2], +m[3]).getTime();
+    }
+    // 5) ISO string või muu Date.parse-iga
+    const t=Date.parse(s);
+    return isNaN(t)?0:t;
+  };
+
+  // Eesti
+  try{
+    const t=await fetchGvizJSON(GVIZ_HIST_EE);
+    let aIdx=-1, jIdx=-1, lIdx=-1, wIdx=-1;
+    if(t.cols){
+      for(let i=0;i<t.cols.length;i++){
+        const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
+        if(aIdx<0&&lbl.includes('aeg'))aIdx=i;
+        else if(jIdx<0&&lbl.includes('jaam'))jIdx=i;
+        else if(lIdx<0&&lbl.includes('veetase'))lIdx=i;
+        else if(wIdx<0&&lbl.includes('veetemp'))wIdx=i;
+      }
+    }
+    if(aIdx<0)aIdx=0; if(jIdx<0)jIdx=1; if(lIdx<0)lIdx=2; if(wIdx<0)wIdx=3;
+    for(const row of (t.rows||[])){
+      const c=row.c;if(!c)continue;
+      const aRaw=c[aIdx]?c[aIdx].v:null;
+      const jaam=(c[jIdx]&&c[jIdx].v!=null)?String(c[jIdx].v).trim():'';
+      const lvl=c[lIdx]?(typeof c[lIdx].v==='number'?c[lIdx].v:parseFloat(String(c[lIdx].v).replace(',','.'))):null;
+      if(!jaam||lvl==null||isNaN(lvl))continue;
+      const ts=parseTs(aRaw);
+      if(!ts||isNaN(ts))continue;
+      if(!ee[jaam])ee[jaam]=[];
+      ee[jaam].push({ts, lvl:Math.round(lvl)});
+    }
+  }catch(e){console.warn('Eesti ajaloo laadimine ebaõnnestus:',e);}
+
+  // Läti
+  try{
+    const t=await fetchGvizJSON(GVIZ_HIST_LV);
+    let aIdx=-1, sIdx=-1, lIdx=-1, wIdx=-1;
+    if(t.cols){
+      for(let i=0;i<t.cols.length;i++){
+        const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
+        if(aIdx<0&&lbl.includes('aeg'))aIdx=i;
+        else if(sIdx<0&&(lbl.includes('station')||lbl.includes('sid')))sIdx=i;
+        else if(lIdx<0&&lbl.includes('veetase'))lIdx=i;
+        else if(wIdx<0&&lbl.includes('veetemp'))wIdx=i;
+      }
+    }
+    if(aIdx<0)aIdx=0; if(sIdx<0)sIdx=1; if(lIdx<0)lIdx=2; if(wIdx<0)wIdx=3;
+    for(const row of (t.rows||[])){
+      const c=row.c;if(!c)continue;
+      const aRaw=c[aIdx]?c[aIdx].v:null;
+      const sid=(c[sIdx]&&c[sIdx].v!=null)?String(c[sIdx].v).trim():'';
+      const lvl=c[lIdx]?(typeof c[lIdx].v==='number'?c[lIdx].v:parseFloat(String(c[lIdx].v).replace(',','.'))):null;
+      if(!sid||lvl==null||isNaN(lvl))continue;
+      const ts=parseTs(aRaw);
+      if(!ts||isNaN(ts))continue;
+      if(!lv[sid])lv[sid]=[];
+      lv[sid].push({ts, lvl:Math.round(lvl)});
+    }
+  }catch(e){console.warn('Läti ajaloo laadimine ebaõnnestus:',e);}
+
+  // Sorteeri kõik aja järgi
+  for(const k in ee)ee[k].sort((a,b)=>a.ts-b.ts);
+  for(const k in lv)lv[k].sort((a,b)=>a.ts-b.ts);
+
+  historyCacheEE=ee;
+  historyCacheLV=lv;
+  historyLoadedTs=Date.now();
+  return {ee, lv};
+}
+
+// Leia ajaloo andmed jõe jaoks - kõigepealt vaata jaama nime
+function getHistoryFor(river){
+  if(!river)return [];
+  if(!historyCacheEE&&!historyCacheLV)return [];
+  // Eesti: võti on jaama nimi
+  if(river.country==='EE'&&historyCacheEE&&river.stJaam){
+    return historyCacheEE[river.stJaam]||[];
+  }
+  // Läti: võti on station_id
+  if(river.country==='LV'&&historyCacheLV&&river.lvSid){
+    return historyCacheLV[river.lvSid]||[];
+  }
+  return [];
+}
+
+// Lae ilmaprognoos (Open-Meteo, tasuta, ilma võtmeta)
+async function fetchWeather(lat, lng){
+  const key=`${lat.toFixed(3)},${lng.toFixed(3)}`;
+  const now=Date.now();
+  if(weatherCache[key]&&(now-weatherCache[key].ts)<15*60*1000){
+    return weatherCache[key].data;
+  }
+  try{
+    const params=[
+      'latitude='+lat,
+      'longitude='+lng,
+      'current=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m,weather_code',
+      'hourly=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m,weather_code',
+      'daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code',
+      'timezone=auto',
+      'forecast_days=5',
+      'wind_speed_unit=ms'
+    ].join('&');
+    const url='https://api.open-meteo.com/v1/forecast?'+params;
+    const resp=await fetch(url);
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const data=await resp.json();
+    weatherCache[key]={data,ts:now};
+    return data;
+  }catch(e){
+    console.warn('Ilmaprognoosi laadimine ebaõnnestus:',e);
+    return null;
+  }
+}
+
+// WMO ilma kood -> emoji + tekst (eestikeelne)
+function weatherDesc(code){
+  const m={
+    0:['☀️','Selge'],1:['🌤️','Enamasti selge'],2:['⛅','Osaliselt pilves'],3:['☁️','Pilves'],
+    45:['🌫️','Udu'],48:['🌫️','Härmaudu'],
+    51:['🌦️','Kerge tibu'],53:['🌦️','Tibu'],55:['🌦️','Tugev tibu'],
+    61:['🌧️','Kerge vihm'],63:['🌧️','Vihm'],65:['🌧️','Tugev vihm'],
+    71:['🌨️','Kerge lumi'],73:['🌨️','Lumi'],75:['🌨️','Tugev lumi'],
+    77:['🌨️','Lumeterad'],
+    80:['🌦️','Hood vihma'],81:['🌧️','Tugev vihm'],82:['⛈️','Paduvihm'],
+    85:['🌨️','Lumehood'],86:['🌨️','Tugevad lumehood'],
+    95:['⛈️','Äike'],96:['⛈️','Äike rahega'],99:['⛈️','Tugev äike']
+  };
+  return m[code]||['🌡️','—'];
+}
+
+// Tuule suuna kraadid -> nime (Põhjast)
+function windDirText(deg){
+  if(deg==null)return '';
+  const dirs=['P','PI','I','KI','L','LE','E','PE'];
+  return dirs[Math.round(deg/45)%8];
+}
+
+// Lae päris jõejoon BRouter API kaudu
+async function fetchRiverRoute(start, end){
+  // start ja end on [lat, lng] kujul, BRouter tahab "lng,lat|lng,lat"
+  const cacheKey=`${start[0]},${start[1]}-${end[0]},${end[1]}`;
+  if(routeCache[cacheKey])return routeCache[cacheKey];
+  const lonlats=`${start[1]},${start[0]}|${end[1]},${end[0]}`;
+  const url=`https://brouter.de/brouter?lonlats=${lonlats}&profile=river&alternativeidx=0&format=geojson`;
+  try{
+    const resp=await fetch(url);
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const geo=await resp.json();
+    if(!geo.features||!geo.features[0]||!geo.features[0].geometry)throw new Error('Vale GeoJSON');
+    const coords=geo.features[0].geometry.coordinates;
+    // BRouter tagastab [lng, lat], Leaflet vajab [lat, lng]
+    const latlngs=coords.map(c=>[c[1],c[0]]);
+    routeCache[cacheKey]=latlngs;
+    return latlngs;
+  }catch(e){
+    console.warn('BRouter ebaõnnestus:',e);
+    return null;
+  }
+}
+
+function initLoikMap(l, myPunktid){
+  if(vMap){
+    vMap.remove();
+    vMap=null;
+  }
+  // Reset GPS markerid (jälgimine jätkub, aga uue kaardi peale uued markerid)
+  gpsMarker=null;
+  gpsCircle=null;
+  // Reset joone andmed (uus lõik = uus joon)
+  gpsCurrentRoute=null;
+  gpsCurrentRouteTotalKm=0;
+  const mapEl=document.getElementById('vmap');
+  if(!mapEl)return;
+  // Default center
+  let center=[58.5, 25.5]; // Eesti keskpaik
+  if(l.algus)center=l.algus;
+  vMap=L.map('vmap').setView(center, 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap | Marsruut: BRouter',
+    maxZoom: 18
+  }).addTo(vMap);
+
+  let routeLine=null;
+
+  // Joonista lõigu joon (algus → lõpp)
+  if(l.algus&&l.lopp){
+    // Esmalt sirgjoon (vaheaegne, kuni BRouter laeb)
+    routeLine=L.polyline([l.algus, l.lopp], {color:'#2d5a3d', weight:3, opacity:0.4, dashArray:'8,6'}).addTo(vMap);
+
+    // Markerid algus ja lõpp
+    L.marker(l.algus, {icon:makeMapIcon('🅰️', '#2d5a3d')}).addTo(vMap)
+      .bindPopup(`<b>Algus</b><br>${l.nimi||''}`);
+    L.marker(l.lopp, {icon:makeMapIcon('🅱️', '#8b1a1a')}).addTo(vMap)
+      .bindPopup(`<b>Lõpp</b><br>${l.nimi||''}`);
+
+    // Proovime laadida BRouterist päris jõe joone (asünkr.)
+    fetchRiverRoute(l.algus, l.lopp).then(latlngs=>{
+      if(!latlngs||!vMap)return; // Modal kinni või ei õnnestunud
+      // Salvesta joone andmed GPS arvutuste jaoks
+      gpsCurrentRoute=latlngs;
+      gpsCurrentRouteTotalKm=routeLengthFrom(latlngs, 0)/1000;
+      // Eemalda sirgjoon ja joonista päris jõe joon
+      if(routeLine){vMap.removeLayer(routeLine);}
+      L.polyline(latlngs, {color:'#2d5a3d', weight:4, opacity:0.85}).addTo(vMap);
+      // Sobita kaart päris joonele
+      try{vMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});}catch(e){}
+      // Kui GPS juba aktiivne, värskenda info
+      if(gpsMarker)updateGpsInfo();
+    });
+  }
+
+  // Markerid punktidele
+  const tyypColors={
+    'veeskamine':'#2d5a3d','valjavotmine':'#8b1a1a','laager':'#9a4e00',
+    'vaatamisvaarsus':'#5a5550','oht':'#dc2626'
+  };
+  const tyypEmojis={
+    'veeskamine':'🚤','valjavotmine':'🏁','laager':'🏕️','vaatamisvaarsus':'👁️','oht':'⚠️'
+  };
+  const allPoints=[];
+  if(l.algus)allPoints.push(l.algus);
+  if(l.lopp)allPoints.push(l.lopp);
+  for(const p of myPunktid){
+    if(!p.koor)continue;
+    allPoints.push(p.koor);
+    const emoji=tyypEmojis[p.tyyp]||'📍';
+    const color=tyypColors[p.tyyp]||'#6b6660';
+    const marker=L.marker(p.koor, {icon:makeMapIcon(emoji, color)}).addTo(vMap);
+    let popup=`<b>${p.nimi||p.tyyp}</b>`;
+    if(p.markused)popup+=`<br>${p.markused}`;
+    popup+=`<br><a href="https://www.google.com/maps?q=${p.koor[0]},${p.koor[1]}" target="_blank" style="font-size:11px;">📍 Google Mapsis</a>`;
+    marker.bindPopup(popup);
+  }
+
+  // Sobita kaart kõigi punktide järgi (hiljem BRouter joon võib seda muuta)
+  if(allPoints.length>0){
+    const bounds=L.latLngBounds(allPoints);
+    vMap.fitBounds(bounds, {padding:[30,30]});
+  }
+
+  // Lisa tuule nool kaardi keskele (asünkroonselt ilmaprognoosi laadimisega)
+  if(l.algus){
+    fetchWeather(l.algus[0], l.algus[1]).then(w=>{
+      if(!w||!w.current||!vMap)return;
+      // Tuule nool umbes keskele
+      let center=l.algus;
+      if(l.lopp){
+        center=[(l.algus[0]+l.lopp[0])/2, (l.algus[1]+l.lopp[1])/2];
+      }
+      const wind=w.current.wind_speed_10m||0;
+      const dir=w.current.wind_direction_10m||0;
+      const windText=windDirText(dir);
+      L.marker(center, {icon:makeWindIcon(dir, wind), zIndexOffset:500}).addTo(vMap)
+        .bindPopup(`<b>💨 Tuul</b><br>${wind.toFixed(1)} m/s ${windText}<br><span style="font-size:10px;color:#666;">Suund kust puhub</span>`);
+    });
+  }
+}
+
+// Tee tuule noole ikoon (nool näitab, KUST puhub - meteoroloogiline standard)
+function makeWindIcon(deg, speed){
+  // Värv kiirusega: roheline (kerge), kollane (mõõdukas), punane (tugev)
+  let color='#1a6b4a';
+  if(speed>=10)color='#dc2626';
+  else if(speed>=6)color='#d97706';
+  // Nool näitab, kust tuul tuleb (rotateerimine deg+180, sest nool näitab "alla", aga me tahame näidata "kust")
+  return L.divIcon({
+    html:`<div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;">
+      <div style="position:absolute;inset:0;background:rgba(255,255,255,0.92);border-radius:50%;border:2px solid ${color};box-shadow:0 2px 5px rgba(0,0,0,0.2);"></div>
+      <div style="position:relative;color:${color};font-size:18px;font-weight:bold;line-height:1;transform:rotate(${deg+180}deg);">↑</div>
+      <div style="position:absolute;bottom:-14px;background:${color};color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;font-family:'DM Mono',monospace;font-weight:600;">${speed.toFixed(0)} m/s</div>
+    </div>`,
+    className:'',
+    iconSize:[34,34],
+    iconAnchor:[17,17]
+  });
+}
+
+// Tee custom marker ikoonid
+function makeMapIcon(emoji, color){
+  return L.divIcon({
+    html:`<div style="background:${color};width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3);"><div style="transform:rotate(45deg);font-size:14px;">${emoji}</div></div>`,
+    className:'',
+    iconSize:[30,30],
+    iconAnchor:[15,28]
+  });
+}
+
+// =============== GPS TRACKING ===============
+
+// Tee sinine täpp kasutaja asukoha jaoks
+function makeGpsIcon(){
+  return L.divIcon({
+    html:`<div style="position:relative;width:18px;height:18px;">
+      <div style="position:absolute;inset:0;background:#3b82f6;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px rgba(59,130,246,0.4),0 2px 6px rgba(0,0,0,0.3);"></div>
+      <div style="position:absolute;inset:-8px;background:rgba(59,130,246,0.15);border-radius:50%;animation:gpspulse 2s ease-out infinite;"></div>
+    </div>`,
+    className:'',
+    iconSize:[18,18],
+    iconAnchor:[9,9]
+  });
+}
+
+// Lülita GPS jälgimine sisse/välja
+function toggleGps(){
+  const btn=document.getElementById('gps-btn');
+  if(gpsWatchId!==null){
+    // Lülita välja
+    stopGps();
+    if(btn)btn.innerHTML='📍 Mu asukoht';
+    return;
+  }
+  // Lülita sisse
+  if(!navigator.geolocation){
+    alert('Sinu brauser ei toeta asukoha jälgimist.');
+    return;
+  }
+  if(btn)btn.innerHTML='⏳ Otsin...';
+  // Esimene asukoht (kiire fix)
+  navigator.geolocation.getCurrentPosition(
+    pos=>updateGps(pos, true),
+    err=>{
+      if(btn)btn.innerHTML='📍 Mu asukoht';
+      let msg='Asukoha leidmine ebaõnnestus.';
+      if(err.code===1)msg='Andsid loaks "Keela" — luba brauseri seadetes asukoha jagamine.';
+      else if(err.code===2)msg='GPS-signaal pole saadaval. Mine välja, kus on parem signaal.';
+      else if(err.code===3)msg='Asukoha leidmine võttis liiga kaua aega.';
+      alert(msg);
+    },
+    {enableHighAccuracy:true, timeout:15000, maximumAge:0}
+  );
+  // Pidev jälgimine
+  gpsWatchId=navigator.geolocation.watchPosition(
+    pos=>updateGps(pos, false),
+    err=>console.warn('GPS viga:',err),
+    {enableHighAccuracy:true, timeout:30000, maximumAge:5000}
+  );
+  gpsFollowing=true;
+}
+
+function stopGps(){
+  if(gpsWatchId!==null){
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId=null;
+  }
+  if(gpsMarker&&vMap){vMap.removeLayer(gpsMarker);gpsMarker=null;}
+  if(gpsCircle&&vMap){vMap.removeLayer(gpsCircle);gpsCircle=null;}
+  gpsFollowing=false;
+  gpsHistory=[];
+  // Peida info paneel
+  const panel=document.getElementById('gps-info');
+  if(panel)panel.style.display='none';
+}
+
+function updateGps(pos, firstFix){
+  if(!vMap)return;
+  const lat=pos.coords.latitude;
+  const lng=pos.coords.longitude;
+  const acc=pos.coords.accuracy||50;
+  const latlng=[lat,lng];
+  const ts=pos.timestamp||Date.now();
+
+  // Salvesta ajalugu (kuni 30 viimast punkti, kiiruse arvutamiseks)
+  // Ainult kui täpsus on mõistlik (< 100 m) ja eelmisest > 5 m kaugusel
+  if(acc<100){
+    const last=gpsHistory[gpsHistory.length-1];
+    if(!last||haversine(latlng,[last.lat,last.lng])>5){
+      gpsHistory.push({lat,lng,ts,acc});
+      if(gpsHistory.length>30)gpsHistory.shift();
+    }
+  }
+
+  // Marker
+  if(!gpsMarker){
+    gpsMarker=L.marker(latlng, {icon:makeGpsIcon(), zIndexOffset:1000}).addTo(vMap);
+    gpsMarker.bindPopup(`<b>📍 Sina oled siin</b><br>Täpsus: ±${Math.round(acc)} m`);
+  } else {
+    gpsMarker.setLatLng(latlng);
+    gpsMarker.setPopupContent(`<b>📍 Sina oled siin</b><br>Täpsus: ±${Math.round(acc)} m`);
+  }
+  // Täpsuse ring
+  if(!gpsCircle){
+    gpsCircle=L.circle(latlng, {radius:acc, color:'#3b82f6', weight:1, fillOpacity:0.08}).addTo(vMap);
+  } else {
+    gpsCircle.setLatLng(latlng);
+    gpsCircle.setRadius(acc);
+  }
+  // Esimese fix korral suumime peale; pärast kasutaja võib käsitsi liikuda
+  if(firstFix&&gpsFollowing){
+    vMap.setView(latlng, Math.max(vMap.getZoom(), 14));
+  }
+  const btn=document.getElementById('gps-btn');
+  if(btn)btn.innerHTML='🎯 Kesken minu peale';
+
+  // Värskenda info paneeli
+  updateGpsInfo();
+}
+
+// Värskenda GPS info paneeli (distants, kiirus, aeg)
+function updateGpsInfo(){
+  const panel=document.getElementById('gps-info');
+  if(!panel)return;
+  if(!gpsMarker){
+    panel.style.display='none';
+    return;
+  }
+  const myPos=[gpsMarker.getLatLng().lat, gpsMarker.getLatLng().lng];
+  // Keskmine kiirus viimaste GPS punktide järgi
+  let avgKmh=null, totalKm=0, totalSec=0;
+  if(gpsHistory.length>=2){
+    for(let i=1;i<gpsHistory.length;i++){
+      const a=gpsHistory[i-1], b=gpsHistory[i];
+      totalKm+=haversine([a.lat,a.lng],[b.lat,b.lng])/1000;
+      totalSec+=(b.ts-a.ts)/1000;
+    }
+    if(totalSec>10&&totalKm>0.01){ // vähemalt 10s ja 10m liikumist
+      avgKmh=(totalKm/totalSec)*3600;
+    }
+  }
+  // Distants joone lõpuni (mööda jõge)
+  let leftKm=null;
+  if(gpsCurrentRoute&&gpsCurrentRoute.length>1){
+    const idx=nearestRouteIdx(myPos, gpsCurrentRoute);
+    if(idx>=0){
+      const meters=routeLengthFrom(gpsCurrentRoute, idx);
+      leftKm=meters/1000;
+    }
+  }
+  // Aeg lõpuni
+  let etaText='—';
+  if(leftKm!=null&&avgKmh!=null&&avgKmh>0.5){
+    const hours=leftKm/avgKmh;
+    const totalMin=Math.round(hours*60);
+    if(totalMin<60)etaText=totalMin+' min';
+    else etaText=Math.floor(totalMin/60)+'h '+(totalMin%60)+'min';
+  } else if(leftKm!=null){
+    etaText='liiga vähe andmeid';
+  }
+
+  // Kuva
+  panel.style.display='flex';
+  let html='';
+  if(leftKm!=null){
+    html+=`<div class="gpsi-item"><div class="gpsi-lbl">📏 Lõpuni</div><div class="gpsi-val">${leftKm.toFixed(1)} km</div></div>`;
+  }
+  if(avgKmh!=null){
+    html+=`<div class="gpsi-item"><div class="gpsi-lbl">🚣 Kiirus</div><div class="gpsi-val">${avgKmh.toFixed(1)} km/h</div></div>`;
+  }
+  if(leftKm!=null){
+    html+=`<div class="gpsi-item"><div class="gpsi-lbl">⏱ ETA</div><div class="gpsi-val">${etaText}</div></div>`;
+  }
+  if(!html){
+    html=`<div class="gpsi-item"><div class="gpsi-lbl">GPS</div><div class="gpsi-val">Kogun andmeid...</div></div>`;
+  }
+  panel.innerHTML=html;
+}
+
+// =============== AUTH (GOOGLE LOGIN) ===============
+
+let currentUser=null;
+
+async function doLogin(){
+  if(!window.fb){
+    alert('Firebase pole laetud. Proovi uuesti hetke pärast.');
+    return;
+  }
+  // Kontrolli, kas kasutaja on juba nõusoleku andnud
+  const consent=localStorage.getItem('rv9_consent');
+  if(!consent){
+    // Näita nõusolekuvormi
+    if(!confirm('Sisselogimisel kogume su nime, e-maili ja profiilipildi (Google\'st) ning hoiame su sõnumeid Firebase\'is.\n\nNõustun privaatsuspoliitikaga ja kasutustingimustega?\n\n(Loe enne nõustumist:\n📄 Privaatsus: ./privaatsus.html\n📄 Tingimused: ./tingimused.html)')){
+      return;
+    }
+    localStorage.setItem('rv9_consent', new Date().toISOString());
+  }
+  try{
+    const result=await window.fb.signInWithPopup(window.fb.auth, window.fb.provider);
+    // currentUser uuendatakse onAuthStateChanged kaudu
+  }catch(err){
+    if(err.code==='auth/popup-closed-by-user')return; // kasutaja sulges, OK
+    if(err.code==='auth/cancelled-popup-request')return;
+    console.error('Login viga:', err);
+    alert('Sisselogimine ebaõnnestus: '+(err.message||err.code));
+  }
+}
+
+async function doLogout(){
+  if(!window.fb)return;
+  try{
+    await window.fb.signOut(window.fb.auth);
+    document.getElementById('user-menu').style.display='none';
+  }catch(err){
+    console.error('Logout viga:', err);
+  }
+}
+
+function toggleUserMenu(){
+  const m=document.getElementById('user-menu');
+  if(!m)return;
+  m.style.display=m.style.display==='block'?'none':'block';
+}
+
+// Kuula kogu dokumendil klikke et menüü sulgeda välise klikiga
+document.addEventListener('click', (e)=>{
+  const menu=document.getElementById('user-menu');
+  const chip=document.getElementById('user-chip');
+  if(!menu||!chip)return;
+  if(menu.style.display==='block'&&!menu.contains(e.target)&&!chip.contains(e.target)){
+    menu.style.display='none';
+  }
+});
+
+// Globaalne callback Firebase'i moodulist
+window.onAuthChange=function(user){
+  currentUser=user;
+  const loginBtn=document.getElementById('login-btn');
+  const chip=document.getElementById('user-chip');
+  const photo=document.getElementById('user-photo');
+  const name=document.getElementById('user-name');
+  const emailEl=document.getElementById('user-menu-email');
+  if(user){
+    // Sisselogitud
+    if(loginBtn)loginBtn.style.display='none';
+    if(chip)chip.style.display='inline-flex';
+    if(photo)photo.src=user.photoURL||'';
+    // Eelistuse järgi: nimi enne, kui pole, siis e-mail
+    if(name)name.textContent=user.displayName||user.email||'Kasutaja';
+    if(emailEl)emailEl.textContent=user.email||'';
+  } else {
+    // Välja logitud
+    if(loginBtn)loginBtn.style.display='inline-block';
+    if(chip)chip.style.display='none';
+    const m=document.getElementById('user-menu');
+    if(m)m.style.display='none';
+  }
+  // Uuenda chati compose seisu (kui chat hetkel avatud)
+  refreshChatCompose();
+};
+
+// =============== CHAT (FIRESTORE) ===============
+
+let activeChatRiver=null; // Praegu avatud vestluse jõe nimi
+let chatUnsubscribe=null; // Firestore listener'i sulgemiseks
+
+function openChat(jogi){
+  if(!window.fb){
+    alert('Vestlus pole veel laetud. Proovi uuesti hetke pärast.');
+    return;
+  }
+  activeChatRiver=jogi;
+  document.getElementById('c-title').textContent='💬 '+jogi;
+  document.getElementById('c-sub').textContent='Vestlus jõe kohta — jaga infot teiste sõitjatega';
+  document.getElementById('c-messages').innerHTML='<div style="padding:30px 12px;text-align:center;color:var(--text3);font-size:13px;">⏳ Laen sõnumeid...</div>';
+  document.getElementById('c-text').value='';
+  updateCharCounter();
+  refreshChatCompose();
+  document.getElementById('cmodal').classList.add('open');
+  // Kuula sõnumeid reaalajas
+  subscribeToMessages(jogi);
+}
+
+function closeChat(){
+  document.getElementById('cmodal').classList.remove('open');
+  if(chatUnsubscribe){
+    chatUnsubscribe();
+    chatUnsubscribe=null;
+  }
+  activeChatRiver=null;
+}
+
+// Värskenda compose ala olenevalt sisselogimisest
+function refreshChatCompose(){
+  const loginPrompt=document.getElementById('c-login-prompt');
+  const inputRow=document.getElementById('c-input-row');
+  if(!loginPrompt||!inputRow)return;
+  if(currentUser){
+    loginPrompt.style.display='none';
+    inputRow.style.display='block';
+  } else {
+    loginPrompt.style.display='block';
+    inputRow.style.display='none';
+  }
+}
+
+// Kuulamine reaalajas Firestore'is
+function subscribeToMessages(jogi){
+  // Sulge eelmine listener
+  if(chatUnsubscribe){
+    chatUnsubscribe();
+    chatUnsubscribe=null;
+  }
+  const fb=window.fb;
+  const q=fb.query(
+    fb.collection(fb.db, 'messages'),
+    fb.where('jogi', '==', jogi),
+    fb.orderBy('ts', 'desc'),
+    fb.limit(100)
+  );
+  chatUnsubscribe=fb.onSnapshot(q, (snap)=>{
+    const msgs=[];
+    snap.forEach(doc=>{
+      const d=doc.data();
+      msgs.push({id:doc.id, ...d});
+    });
+    msgs.reverse(); // vanimad üleval, uusimad all
+    renderMessages(msgs);
+  }, (err)=>{
+    console.error('Sõnumite kuulamine ebaõnnestus:', err);
+    document.getElementById('c-messages').innerHTML='<div style="padding:30px 12px;text-align:center;color:var(--red);font-size:13px;">⚠️ Sõnumeid ei õnnestunud laadida</div>';
+  });
+}
+
+// Render sõnumite list
+function renderMessages(msgs){
+  const el=document.getElementById('c-messages');
+  if(!el)return;
+  if(msgs.length===0){
+    el.innerHTML='<div class="c-empty">Veel pole sõnumeid.<br>Ole esimene, kes jagab infot!</div>';
+    return;
+  }
+  const myUid=currentUser?currentUser.uid:null;
+  let html='';
+  for(const m of msgs){
+    const isMine=m.uid===myUid;
+    const time=m.ts&&m.ts.toDate?fmtChatTime(m.ts.toDate()):'…';
+    const photo=m.photoURL?`<img class="c-msg-avatar" src="${escapeHtml(m.photoURL)}" alt=""/>`:`<div class="c-msg-avatar-fallback">${(m.name||'?').charAt(0).toUpperCase()}</div>`;
+    html+=`<div class="c-msg ${isMine?'mine':''}">
+      ${photo}
+      <div class="c-msg-body">
+        <div class="c-msg-head">
+          <span class="c-msg-name">${escapeHtml(m.name||'Kasutaja')}</span>
+          <span class="c-msg-time">${time}</span>
+        </div>
+        <div class="c-msg-text">${escapeHtml(m.text||'')}</div>
+        ${isMine?`<div class="c-msg-actions"><button onclick="deleteMessage('${m.id}')">Kustuta</button></div>`:''}
+      </div>
+    </div>`;
+  }
+  el.innerHTML=html;
+  // Keri alla uusimate poole
+  el.scrollTop=el.scrollHeight;
+}
+
+// Saada uus sõnum
+async function sendMessage(){
+  if(!currentUser){
+    alert('Logi sisse, et sõnumit saata');
+    return;
+  }
+  const input=document.getElementById('c-text');
+  const text=input.value.trim();
+  if(!text)return;
+  if(text.length>1000){
+    alert('Sõnum on liiga pikk (maks 1000 tähemärki)');
+    return;
+  }
+  if(!activeChatRiver)return;
+  const btn=document.getElementById('c-send-btn');
+  btn.disabled=true;
+  btn.textContent='Saadan...';
+  try{
+    const fb=window.fb;
+    await fb.addDoc(fb.collection(fb.db, 'messages'), {
+      jogi: activeChatRiver,
+      text: text,
+      uid: currentUser.uid,
+      name: currentUser.displayName||currentUser.email||'Kasutaja',
+      photoURL: currentUser.photoURL||null,
+      ts: fb.serverTimestamp()
+    });
+    input.value='';
+    updateCharCounter();
+  }catch(err){
+    console.error('Sõnumi saatmine ebaõnnestus:', err);
+    alert('Sõnumi saatmine ebaõnnestus: '+(err.message||err.code||'tundmatu viga'));
+  }finally{
+    btn.disabled=false;
+    btn.textContent='📤 Saada';
+  }
+}
+
+// Kustuta oma sõnum
+async function deleteMessage(id){
+  if(!currentUser)return;
+  if(!confirm('Kustuta see sõnum?'))return;
+  try{
+    const fb=window.fb;
+    await fb.deleteDoc(fb.doc(fb.db, 'messages', id));
+    // Listener uuendab kohaliku list ise
+  }catch(err){
+    console.error('Sõnumi kustutamine ebaõnnestus:', err);
+    alert('Kustutamine ebaõnnestus: '+(err.message||err.code));
+  }
+}
+
+// Vorming "5 min tagasi", "2 tundi tagasi", "eile" jne
+function fmtChatTime(d){
+  const now=Date.now();
+  const ts=d.getTime();
+  const diff=Math.round((now-ts)/1000);
+  if(diff<60)return 'just nüüd';
+  if(diff<3600)return Math.round(diff/60)+' min tagasi';
+  if(diff<86400)return Math.round(diff/3600)+' h tagasi';
+  if(diff<86400*7){
+    const days=Math.round(diff/86400);
+    if(days===1)return 'eile';
+    return days+' p tagasi';
+  }
+  return d.toLocaleDateString('et-EE',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('et-EE',{hour:'2-digit',minute:'2-digit'});
+}
+
+function escapeHtml(s){
+  const div=document.createElement('div');
+  div.textContent=String(s);
+  return div.innerHTML;
+}
+
+function updateCharCounter(){
+  const t=document.getElementById('c-text');
+  const c=document.getElementById('c-counter');
+  if(!t||!c)return;
+  const len=t.value.length;
+  c.textContent=len+'/1000';
+  c.classList.remove('warn','danger');
+  if(len>900)c.classList.add('danger');
+  else if(len>800)c.classList.add('warn');
+}
+
+// Tekstivälja kuulajad (Enter = saada, Shift+Enter = uus rida)
+document.addEventListener('input', (e)=>{
+  if(e.target&&e.target.id==='c-text')updateCharCounter();
+});
+document.addEventListener('keydown', (e)=>{
+  if(e.target&&e.target.id==='c-text'&&e.key==='Enter'&&!e.shiftKey){
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+async function init(){
+  // 1) Laadi vaikimisi nimekiri Sheetsist (jookseb paralleelselt veetasemete laadimisega)
+  // 2) Laadi veetasemed
+  document.getElementById('stxt').textContent='Laen vaikimisi nimekirja ja veetasemeid...';
+  document.getElementById('sdot').className='sdot loading';
+  try{
+    await Promise.all([loadDefaults(), loadCSV(), loadLoigud(), loadPunktid()]);
+    document.getElementById('sdot').className='sdot';
+    const cacheCnt=allSt.filter(s=>s.isCache).length;
+    const txt=cacheCnt>0?`${allSt.length} jaama laetud (${cacheCnt} varuandmetest) · ${fmt(lupd)}`:`${allSt.length} jaama laetud · ${fmt(lupd)}`;
+    document.getElementById('stxt').textContent=txt;
+    document.getElementById('lupd').textContent=fmt(lupd);
+    filtSt=[...allSt];
+  }catch(e){
+    document.getElementById('sdot').className='sdot err';
+    document.getElementById('stxt').textContent='Viga: '+e.message;
+  }
+  // 3) Ehita kasutaja nimekiri (defaults + kasutaja kohandused)
+  buildRivers();
+  render();
+}
+init();
+</script>
+</body>
+</html>

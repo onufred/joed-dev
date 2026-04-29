@@ -104,6 +104,9 @@
   .user-menu-item:hover { background:var(--surface2); }
   /* Premium tier näit */
   .tier-badge { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 1px 7px; border-radius: 9px; font-size: 9px; font-weight: 700; letter-spacing: 0.4px; font-family: 'DM Sans', sans-serif; }
+  .tier-badge.tier-admin { background: linear-gradient(135deg, #6d28d9, #4c1d95); }
+  .tier-badge.tier-guide { background: linear-gradient(135deg, #1d4ed8, #1e3a8a); }
+  .tier-badge.tier-premium { background: linear-gradient(135deg, #f59e0b, #d97706); }
   .menu-tier-info { padding: 10px 14px; font-size: 12px; color: var(--text); border-bottom: 1px solid var(--surface2); background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(217,119,6,0.05)); }
   .menu-tier-info b { color: #d97706; }
   .btn { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; transition: all .15s; }
@@ -159,6 +162,10 @@
   .vp-sub { font-size:12px; color:var(--text3); margin-bottom:14px; font-family:'DM Mono',monospace; }
   .vp-tabs { display:flex; gap:4px; margin-bottom:12px; background:var(--bg); border-radius:8px; padding:4px; flex-wrap:wrap; }
   .vp-tab { font-size:12px; font-weight:500; padding:7px 12px; border-radius:6px; border:none; background:transparent; color:var(--text2); cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .vp-tab.user-loik { background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(217,119,6,0.08)); border:1px solid rgba(245,158,11,0.25); }
+  .vp-tab.user-loik.active { background: linear-gradient(135deg, #f59e0b, #d97706); color:#fff; border-color:#d97706; }
+  .vp-tab-add { background: rgba(45,90,61,0.08); color:var(--accent); font-weight:600; border:1px dashed var(--accent); }
+  .vp-tab-add:hover { background: rgba(45,90,61,0.15); }
   .vp-tab.active { background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.1); }
   .vp-loik-info { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
   .vp-info-pill { font-size:11px; padding:4px 9px; border-radius:7px; background:var(--bg); color:var(--text2); border:1px solid var(--surface2); display:inline-flex; align-items:center; gap:5px; font-family:'DM Mono',monospace; }
@@ -307,9 +314,9 @@
   </div>
   <div class="header-right">
     <button class="btn" id="rbtn" onclick="refreshAll()">↻ Uuenda</button>
-    <button class="btn" onclick="resetDefaults()" title="Lähtesta vaikimisi nimekiri">🔄 Lähtesta</button>
-    <button class="btn" onclick="exportSettings()">📤 Ekspordi</button>
-    <button class="btn btn-primary" onclick="openM()">+ Lisa jõgi</button>
+    <button class="btn" id="reset-btn" onclick="resetDefaults()" title="Lähtesta vaikimisi nimekiri" style="display:none;">🔄 Lähtesta</button>
+    <button class="btn" id="export-btn" onclick="exportSettings()" style="display:none;">📤 Ekspordi</button>
+    <button class="btn btn-primary" id="add-btn" onclick="openM()" style="display:none;">+ Lisa jõgi</button>
     <div id="auth-area">
       <button class="btn" id="login-btn" onclick="doLogin()">🔐 Logi sisse</button>
       <div id="user-chip" style="display:none;" onclick="toggleUserMenu()" title="Klõpsa profiili menüü jaoks">
@@ -428,6 +435,27 @@
   </div>
 </div>
 
+<div class="overlay" id="clmodal">
+  <div class="modal">
+    <div class="modal-title">⭐ Loo oma jõe lõik</div>
+    <p style="font-size:11px;color:var(--text3);margin-bottom:12px;">Sinu lõik on privaatne — näed seda ainult sina selle kontoga.</p>
+    <div class="mrow"><label>Jõe nimi *</label><input id="cl-jogi" type="text" placeholder="nt Pärnu, Avijõgi"/></div>
+    <div class="mrow"><label>Lõigu nimi *</label><input id="cl-nimi" type="text" placeholder="nt Kallaste – Kavastu"/></div>
+    <div class="mgrid">
+      <div class="mrow"><label>Pikkus (km)</label><input id="cl-pikkus" type="number" step="0.1" placeholder="12"/></div>
+      <div class="mrow"><label>Raskus</label><input id="cl-raskus" type="text" placeholder="nt Algajale / WW1"/></div>
+    </div>
+    <div class="mrow"><label>Algus koordinaadid (lat, lng)</label><input id="cl-algus" type="text" placeholder="58.5234, 25.9876"/></div>
+    <div class="mrow"><label>Lõpu koordinaadid (lat, lng)</label><input id="cl-lopp" type="text" placeholder="58.5500, 26.0123"/></div>
+    <div class="mrow"><label>Märkused</label><textarea id="cl-markused" rows="3" placeholder="Mida peaks teadma sõitmisest? Kärestikud, takistused, parkimine..." style="width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;"></textarea></div>
+    <p style="font-size:10px;color:var(--text3);margin-top:8px;">💡 <b>Vihje:</b> Koordinaate saad <a href="https://www.google.com/maps" target="_blank" style="color:var(--accent);">Google Maps'ist</a> — paremklikk kohale → kuvatakse lat/lng. Kopeeri "58.5234, 25.9876" kujul.</p>
+    <div class="mact">
+      <button class="btn" onclick="closeCreateLoik()">Tühista</button>
+      <button class="btn btn-primary" onclick="submitCreateLoik()">💾 Salvesta</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const SK='rv9';
 // A=Veekogu, B=Jaam, C=Veetase(cm) — täpselt sinu Sheetsi struktuur
@@ -523,7 +551,8 @@ for(const k in LV_RIVERS){
 
 let rivers=[], liveData={}, allSt=[], filtSt=[], selSt=null, editId=null, busy=false, lupd=null;
 let defaults=[]; // Sinu Sheetsist tulevad vaikimisi jõed
-let loigud=[]; // Jõgede lõigud
+let loigud=[]; // Jõgede lõigud (avalikud Sheetsist)
+let userLoigud=[]; // Kasutaja oma lõigud (Firestore'ist)
 let punktid=[]; // Lõikude punktid (veeskamine, laager, jne)
 let activeLoik=null; // Praegu vaadeldav lõik
 let vMap=null; // Leaflet map instance
@@ -1321,24 +1350,40 @@ function resetDefaults(){
 function hasLoigud(jogi){
   if(!jogi)return false;
   const j=jogi.toLowerCase();
-  return loigud.some(l=>l.jogi.toLowerCase()===j);
+  if(loigud.some(l=>l.jogi.toLowerCase()===j))return true;
+  if(userLoigud.some(l=>l.jogi.toLowerCase()===j))return true;
+  return false;
 }
 
 // Avage Veepeale modaali kindlale jõele
 function openV(jogi){
   activeLoik=null;
-  // Leia jõe lõigud
-  const j=jogi.toLowerCase();
-  const myLoigud=loigud.filter(l=>l.jogi.toLowerCase()===j);
+  // Leia jõe lõigud (avalikud + kasutaja oma)
+  const myLoigud=getAllLoiguad(jogi);
   if(myLoigud.length===0){
-    alert('Sellel jõel pole hetkel lõike sisestatud.');
+    if(canCreateLoik()){
+      // Premium kasutaja - paku, et saaks luua
+      if(confirm('Sellel jõel pole hetkel lõike. Kas soovid ise lisada?')){
+        openCreateLoik(jogi);
+      }
+    } else {
+      alert('Sellel jõel pole hetkel lõike sisestatud.');
+    }
     return;
   }
   document.getElementById('vp-title').textContent='🗺️ '+jogi;
-  document.getElementById('vp-sub').textContent=myLoigud.length+' lõik'+(myLoigud.length>1?'u':'')+' · '+punktid.filter(p=>p.jogi.toLowerCase()===j).length+' punkti';
-  // Tabid lõikude kaupa
+  document.getElementById('vp-sub').textContent=myLoigud.length+' lõik'+(myLoigud.length>1?'u':'')+' · '+punktid.filter(p=>p.jogi.toLowerCase()===jogi.toLowerCase()).length+' punkti';
+  // Tabid lõikude kaupa (kasutaja omad on eristatud ⭐ märgiga)
   const tabsEl=document.getElementById('vp-tabs');
-  tabsEl.innerHTML=myLoigud.map((l,i)=>`<button class="vp-tab ${i===0?'active':''}" onclick="selectLoik('${l.id}')">${l.id}: ${l.nimi||l.id}</button>`).join('');
+  let tabsHtml=myLoigud.map((l,i)=>{
+    const lbl=l.isUserLoik?'⭐ '+(l.nimi||l.id):(l.id+': '+(l.nimi||l.id));
+    return `<button class="vp-tab ${i===0?'active':''} ${l.isUserLoik?'user-loik':''}" onclick="selectLoik('${l.id}')">${lbl}</button>`;
+  }).join('');
+  // Lisa "+ Loo oma lõik" nupp ainult Premium+ kasutajatele
+  if(canCreateLoik()){
+    tabsHtml+=`<button class="vp-tab vp-tab-add" onclick="openCreateLoik('${jogi.replace(/'/g,"\\'")}')">+ Loo oma lõik</button>`;
+  }
+  tabsEl.innerHTML=tabsHtml;
   // Vali esimene
   selectLoik(myLoigud[0].id);
   document.getElementById('vmodal').classList.add('open');
@@ -1356,12 +1401,18 @@ function closeV(){
 
 // Vali konkreetne lõik kuvamiseks
 function selectLoik(loikId){
-  const l=loigud.find(ll=>ll.id===loikId);
+  let l=loigud.find(ll=>ll.id===loikId);
+  if(!l)l=userLoigud.find(ll=>ll.id===loikId);
   if(!l)return;
   activeLoik=l;
   // Aktiveeri tab
   document.querySelectorAll('.vp-tab').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.vp-tab').forEach(t=>{if(t.textContent.startsWith(loikId+':'))t.classList.add('active');});
+  document.querySelectorAll('.vp-tab').forEach(t=>{
+    const txt=t.textContent;
+    if(txt.startsWith(loikId+':')||(l.isUserLoik&&txt==='⭐ '+(l.nimi||l.id))){
+      t.classList.add('active');
+    }
+  });
   // Render content
   renderLoik(l);
 }
@@ -1377,6 +1428,13 @@ function renderLoik(l){
   };
   // HTML
   let html='';
+  // Kasutaja-lõigu indikaator + kustutusnupp
+  if(l.isUserLoik){
+    html+=`<div style="background:linear-gradient(135deg, rgba(245,158,11,0.12), rgba(217,119,6,0.06));border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <span>⭐ <b>Sinu privaatne lõik</b> — näed ainult sina</span>
+      <button onclick="deleteUserLoik('${l.firestoreId}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif;">🗑 Kustuta</button>
+    </div>`;
+  }
   // Info pillid + tegevuste nupud
   html+='<div class="vp-loik-info">';
   if(l.pikkus)html+=`<span class="vp-info-pill">📏 <b>${l.pikkus} km</b></span>`;
@@ -2257,12 +2315,18 @@ async function ensureUserProfile(user){
   }
 }
 
-// Kontrolli, kas kasutaja on premium (kehtiv)
+// Kontrolli, kas kasutaja on premium (kehtiv) - see hõlmab premium, guide ja admin
 function isPremium(){
   if(!currentUserProfile)return false;
-  if(currentUserProfile.tier==='free')return false;
-  if(!currentUserProfile.premiumUntil)return currentUserProfile.tier!=='free'; // ilma kehtivuseta = igavesti (manuaalselt antud)
-  // Kontrolli kehtivust
+  const tier=currentUserProfile.tier;
+  if(tier==='free'||!tier)return false;
+  // Admin ja guide kehtivad alati (ei pea premiumUntil-i kontrollima)
+  if(tier==='admin')return true;
+  // Premium ja guide vajavad kehtivat premiumUntil
+  if(!currentUserProfile.premiumUntil){
+    // Kui pole määratud, eeldame igavest (manuaalselt antud)
+    return true;
+  }
   const until=currentUserProfile.premiumUntil.toDate?currentUserProfile.premiumUntil.toDate():new Date(currentUserProfile.premiumUntil);
   return until.getTime()>Date.now();
 }
@@ -2271,11 +2335,28 @@ function isPremium(){
 function getUserTier(){
   if(!currentUser)return 'guest'; // pole loginud
   if(!currentUserProfile)return 'free'; // ootame andmeid
+  const tier=currentUserProfile.tier||'free';
+  // Admin on alati admin
+  if(tier==='admin')return 'admin';
+  // Teised tasandid vajavad premium kehtivust
   if(!isPremium())return 'free';
-  return currentUserProfile.tier; // 'premium' või 'guide'
+  return tier; // 'premium' või 'guide'
 }
 
-// Uuenda UI vastavalt premium staatusele
+// Hierarhia: admin > guide > premium > free > guest
+// Kontrolli, kas kasutaja on vähemalt teatud tasandil
+function hasTier(minTier){
+  const tierLevels={'guest':0, 'free':1, 'premium':2, 'guide':3, 'admin':4};
+  const my=tierLevels[getUserTier()]||0;
+  const need=tierLevels[minTier]||0;
+  return my>=need;
+}
+
+// Kasutaja-spetsiifilised abifunktsioonid
+function isAdmin(){return getUserTier()==='admin';}
+function isGuide(){return hasTier('guide');}
+function canCreateLoik(){return hasTier('premium');} // premium, guide, admin
+
 function updatePremiumUI(){
   const tier=getUserTier();
   // Lisa märk kasutaja chip-ile
@@ -2283,11 +2364,12 @@ function updatePremiumUI(){
   if(chip){
     let badge=chip.querySelector('.tier-badge');
     if(badge)badge.remove();
-    if(tier==='premium'||tier==='guide'){
+    if(tier!=='free'&&tier!=='guest'){
       badge=document.createElement('span');
-      badge.className='tier-badge';
-      badge.textContent=tier==='guide'?'⭐ Juht':'⭐ Pro';
-      badge.title='Premium kasutaja';
+      badge.className='tier-badge tier-'+tier;
+      const labels={'admin':'👑 Admin', 'guide':'🚣 Juht', 'premium':'⭐ Pro'};
+      badge.textContent=labels[tier]||tier;
+      badge.title=tier==='admin'?'Administraator':(tier==='guide'?'Matkajuht':'Premium kasutaja');
       chip.insertBefore(badge, chip.querySelector('span:last-child'));
     }
   }
@@ -2302,16 +2384,182 @@ function updatePremiumUI(){
     }
     if(tier==='guest'){
       tierInfo.style.display='none';
-    } else if(tier==='premium'||tier==='guide'){
-      const untilStr=currentUserProfile.premiumUntil?
-        ' (kehtib kuni '+(currentUserProfile.premiumUntil.toDate?currentUserProfile.premiumUntil.toDate():new Date(currentUserProfile.premiumUntil)).toLocaleDateString('et-EE')+')':
-        '';
-      tierInfo.innerHTML='⭐ <b>'+(tier==='guide'?'Matkajuht':'Premium')+'</b>'+untilStr;
+    } else if(tier==='admin'){
+      tierInfo.innerHTML='👑 <b>Administraator</b><br><small style="color:var(--text3);">Täielikud õigused</small>';
+      tierInfo.style.display='block';
+    } else if(tier==='guide'){
+      const untilStr=(currentUserProfile&&currentUserProfile.premiumUntil)?
+        '<br><small style="color:var(--text3);">Kehtib kuni '+(currentUserProfile.premiumUntil.toDate?currentUserProfile.premiumUntil.toDate():new Date(currentUserProfile.premiumUntil)).toLocaleDateString('et-EE')+'</small>':'';
+      tierInfo.innerHTML='🚣 <b>Matkajuht</b>'+untilStr;
+      tierInfo.style.display='block';
+    } else if(tier==='premium'){
+      const untilStr=(currentUserProfile&&currentUserProfile.premiumUntil)?
+        '<br><small style="color:var(--text3);">Kehtib kuni '+(currentUserProfile.premiumUntil.toDate?currentUserProfile.premiumUntil.toDate():new Date(currentUserProfile.premiumUntil)).toLocaleDateString('et-EE')+'</small>':'';
+      tierInfo.innerHTML='⭐ <b>Premium</b>'+untilStr;
       tierInfo.style.display='block';
     } else {
       tierInfo.innerHTML='<span style="color:var(--text3)">🆓 Tasuta kasutaja</span>';
       tierInfo.style.display='block';
     }
+  }
+  // Värskenda päisesse nuppude nähtavus
+  // Ekspordi - AINULT admin (kasutab keskseid Sheetsi andmeid)
+  const exportBtn=document.getElementById('export-btn');
+  if(exportBtn)exportBtn.style.display=isAdmin()?'inline-block':'none';
+  // Lähtesta - kõigil sisselogitutel (lokaalne, isiklik seade)
+  const resetBtn=document.getElementById('reset-btn');
+  if(resetBtn)resetBtn.style.display=currentUser?'inline-block':'none';
+  // Lisa jõgi - kõigil sisselogitutel (saab lisada uusi vaikimisi nimekirja)
+  const addBtn=document.getElementById('add-btn');
+  if(addBtn)addBtn.style.display=currentUser?'inline-block':'none';
+  // Lae kasutaja oma lõigud (kui premium+)
+  if(canCreateLoik()){
+    loadUserLoigud();
+  } else {
+    userLoigud=[];
+  }
+}
+
+// =============== USER LOIGUD (premium funktsioon) ===============
+
+// Lae kasutaja oma lõigud Firestore'ist
+async function loadUserLoigud(){
+  if(!currentUser||!window.fb){userLoigud=[];return;}
+  try{
+    const fb=window.fb;
+    const q=fb.query(
+      fb.collection(fb.db, 'userLoigud'),
+      fb.where('uid', '==', currentUser.uid)
+    );
+    const snap=await new Promise((resolve, reject)=>{
+      // Kasutame onSnapshot-i, et oleks reaalajas värskendamine
+      fb.onSnapshot(q, resolve, reject);
+    });
+    const arr=[];
+    snap.forEach(doc=>{
+      const d=doc.data();
+      // Konverdi Firestore Timestamp -> JS objekt
+      arr.push({
+        id: 'user_'+doc.id,
+        firestoreId: doc.id,
+        jogi: d.jogi||'',
+        nimi: d.nimi||'',
+        algus: d.algusLat&&d.algusLng?[d.algusLat, d.algusLng]:null,
+        lopp: d.loppLat&&d.loppLng?[d.loppLat, d.loppLng]:null,
+        pikkus: d.pikkus||null,
+        raskus: d.raskus||'',
+        markused: d.markused||'',
+        isUserLoik: true,
+        uid: d.uid
+      });
+    });
+    userLoigud=arr;
+    // Kui mõni modal on avatud, värskenda see
+    if(activeLoik&&document.getElementById('vmodal').classList.contains('open')){
+      // Re-render kui peaks uuendamise käivituma
+    }
+  }catch(err){
+    console.warn('Kasutaja lõikude laadimine ebaõnnestus:', err);
+    userLoigud=[];
+  }
+}
+
+// Salvesta uus kasutaja lõik
+async function saveUserLoik(data){
+  if(!currentUser||!window.fb)return null;
+  if(!canCreateLoik()){alert('See on premium funktsioon');return null;}
+  try{
+    const fb=window.fb;
+    const newLoik={
+      uid: currentUser.uid,
+      jogi: data.jogi||'',
+      nimi: data.nimi||'',
+      algusLat: data.algus?data.algus[0]:null,
+      algusLng: data.algus?data.algus[1]:null,
+      loppLat: data.lopp?data.lopp[0]:null,
+      loppLng: data.lopp?data.lopp[1]:null,
+      pikkus: data.pikkus||null,
+      raskus: data.raskus||'',
+      markused: data.markused||'',
+      createdAt: fb.serverTimestamp()
+    };
+    const ref=await fb.addDoc(fb.collection(fb.db, 'userLoigud'), newLoik);
+    await loadUserLoigud();
+    return ref.id;
+  }catch(err){
+    console.error('Lõigu salvestamine ebaõnnestus:', err);
+    alert('Salvestamine ebaõnnestus: '+(err.message||err.code));
+    return null;
+  }
+}
+
+// Kustuta kasutaja lõik
+async function deleteUserLoik(firestoreId){
+  if(!currentUser||!window.fb)return;
+  if(!confirm('Kustuta see lõik?'))return;
+  try{
+    const fb=window.fb;
+    await fb.deleteDoc(fb.doc(fb.db, 'userLoigud', firestoreId));
+    await loadUserLoigud();
+    // Sulge modal kui kuvatud lõik kustutati
+    if(activeLoik&&activeLoik.firestoreId===firestoreId){
+      closeV();
+    }
+  }catch(err){
+    console.error('Kustutamine ebaõnnestus:', err);
+    alert('Kustutamine ebaõnnestus: '+(err.message||err.code));
+  }
+}
+
+// Liida avalikud + kasutaja lõigud kokku jõe jaoks
+function getAllLoiguad(jogi){
+  const j=String(jogi||'').toLowerCase();
+  const publicLoigud=loigud.filter(l=>String(l.jogi||'').toLowerCase()===j);
+  const myLoigud=userLoigud.filter(l=>String(l.jogi||'').toLowerCase()===j);
+  return [...publicLoigud, ...myLoigud];
+}
+
+// Avab vormi uue kasutaja lõigu loomiseks
+function openCreateLoik(jogi){
+  if(!canCreateLoik()){
+    alert('See on premium funktsioon. Vajad Premium, Matkajuhi või Admini staatust.');
+    return;
+  }
+  document.getElementById('cl-jogi').value=jogi||'';
+  document.getElementById('cl-nimi').value='';
+  document.getElementById('cl-pikkus').value='';
+  document.getElementById('cl-raskus').value='';
+  document.getElementById('cl-markused').value='';
+  document.getElementById('cl-algus').value='';
+  document.getElementById('cl-lopp').value='';
+  document.getElementById('clmodal').classList.add('open');
+}
+
+function closeCreateLoik(){
+  document.getElementById('clmodal').classList.remove('open');
+}
+
+async function submitCreateLoik(){
+  const jogi=document.getElementById('cl-jogi').value.trim();
+  const nimi=document.getElementById('cl-nimi').value.trim();
+  const pikkus=parseFloat(document.getElementById('cl-pikkus').value);
+  const raskus=document.getElementById('cl-raskus').value.trim();
+  const markused=document.getElementById('cl-markused').value.trim();
+  const algusStr=document.getElementById('cl-algus').value.trim();
+  const loppStr=document.getElementById('cl-lopp').value.trim();
+  if(!jogi){alert('Sisesta jõe nimi');return;}
+  if(!nimi){alert('Sisesta lõigu nimi');return;}
+  // Parsi koordinaadid
+  const algus=parseCoords(algusStr);
+  const lopp=parseCoords(loppStr);
+  if(!algus){alert('Sisesta kehtivad algus-koordinaadid (lat, lng)');return;}
+  if(!lopp){alert('Sisesta kehtivad lõpu-koordinaadid (lat, lng)');return;}
+  const data={jogi, nimi, algus, lopp, pikkus:isNaN(pikkus)?null:pikkus, raskus, markused};
+  const id=await saveUserLoik(data);
+  if(id){
+    closeCreateLoik();
+    // Ava kohe Veepeale see jõgi (et näha uus lõik)
+    setTimeout(()=>openV(jogi), 200);
   }
 }
 

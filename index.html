@@ -11,7 +11,7 @@
   // Firebase imports
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-  import { getFirestore, collection, query, where, orderBy, limit, addDoc, deleteDoc, doc, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+  import { getFirestore, collection, query, where, orderBy, limit, addDoc, deleteDoc, doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
   // Tuvasta keskkond URL-i järgi
   const isDev = window.location.pathname.includes('/joed-dev') || window.location.hostname === 'localhost';
@@ -51,7 +51,7 @@
     auth, db, provider,
     signInWithPopup, signOut, onAuthStateChanged,
     collection, query, where, orderBy, limit,
-    addDoc, deleteDoc, doc, serverTimestamp, onSnapshot,
+    addDoc, deleteDoc, doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot,
     isDev: isDev,
     projectId: firebaseConfig.projectId
   };
@@ -102,6 +102,10 @@
   #user-menu { position:absolute; top:calc(100% + 6px); right:0; min-width:200px; background:var(--surface); border:1px solid var(--border); border-radius:9px; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:50; overflow:hidden; }
   .user-menu-item { display:block; width:100%; text-align:left; padding:11px 14px; font-size:13px; border:none; background:transparent; color:var(--text); cursor:pointer; font-family:'DM Sans',sans-serif; }
   .user-menu-item:hover { background:var(--surface2); }
+  /* Premium tier näit */
+  .tier-badge { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 1px 7px; border-radius: 9px; font-size: 9px; font-weight: 700; letter-spacing: 0.4px; font-family: 'DM Sans', sans-serif; }
+  .menu-tier-info { padding: 10px 14px; font-size: 12px; color: var(--text); border-bottom: 1px solid var(--surface2); background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(217,119,6,0.05)); }
+  .menu-tier-info b { color: #d97706; }
   .btn { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; transition: all .15s; }
   .btn:hover { background: var(--surface2); }
   .btn:disabled { opacity: .4; cursor: default; }
@@ -2195,16 +2199,121 @@ window.onAuthChange=function(user){
     // Eelistuse järgi: nimi enne, kui pole, siis e-mail
     if(name)name.textContent=user.displayName||user.email||'Kasutaja';
     if(emailEl)emailEl.textContent=user.email||'';
+    // Lae kasutaja profiil Firestore'ist (loo, kui pole)
+    ensureUserProfile(user);
   } else {
     // Välja logitud
     if(loginBtn)loginBtn.style.display='inline-block';
     if(chip)chip.style.display='none';
     const m=document.getElementById('user-menu');
     if(m)m.style.display='none';
+    currentUserProfile=null;
+    updatePremiumUI();
   }
   // Uuenda chati compose seisu (kui chat hetkel avatud)
   refreshChatCompose();
 };
+
+// =============== USER MANAGEMENT ===============
+
+let currentUserProfile=null; // {tier, premiumUntil, ...}
+
+// Loo või uuenda kasutaja profiil Firestore'is
+async function ensureUserProfile(user){
+  if(!user||!window.fb)return;
+  try{
+    const fb=window.fb;
+    const userRef=fb.doc(fb.db, 'users', user.uid);
+    const snap=await fb.getDoc(userRef);
+    if(snap.exists()){
+      // Olemasolev profiil - uuenda lastSeen ja andmed (juhul kui Google'is muutus)
+      currentUserProfile=snap.data();
+      // Uuenda ainult name, photoURL, lastSeen (mitte tier!)
+      try{
+        await fb.updateDoc(userRef, {
+          name: user.displayName||user.email||'Kasutaja',
+          photoURL: user.photoURL||null,
+          lastSeen: fb.serverTimestamp()
+        });
+      }catch(e){console.warn('lastSeen uuendamine ebaõnnestus:', e);}
+    } else {
+      // Uus kasutaja - loo profiil
+      const newProfile={
+        uid: user.uid,
+        name: user.displayName||user.email||'Kasutaja',
+        email: user.email||'',
+        photoURL: user.photoURL||null,
+        createdAt: fb.serverTimestamp(),
+        lastSeen: fb.serverTimestamp(),
+        tier: 'free',
+        premiumUntil: null
+      };
+      await fb.setDoc(userRef, newProfile);
+      currentUserProfile=newProfile;
+    }
+    updatePremiumUI();
+  }catch(err){
+    console.warn('Kasutaja profiili laadimine ebaõnnestus:', err);
+  }
+}
+
+// Kontrolli, kas kasutaja on premium (kehtiv)
+function isPremium(){
+  if(!currentUserProfile)return false;
+  if(currentUserProfile.tier==='free')return false;
+  if(!currentUserProfile.premiumUntil)return currentUserProfile.tier!=='free'; // ilma kehtivuseta = igavesti (manuaalselt antud)
+  // Kontrolli kehtivust
+  const until=currentUserProfile.premiumUntil.toDate?currentUserProfile.premiumUntil.toDate():new Date(currentUserProfile.premiumUntil);
+  return until.getTime()>Date.now();
+}
+
+// Tagasta kasutaja "tier" tekstina
+function getUserTier(){
+  if(!currentUser)return 'guest'; // pole loginud
+  if(!currentUserProfile)return 'free'; // ootame andmeid
+  if(!isPremium())return 'free';
+  return currentUserProfile.tier; // 'premium' või 'guide'
+}
+
+// Uuenda UI vastavalt premium staatusele
+function updatePremiumUI(){
+  const tier=getUserTier();
+  // Lisa märk kasutaja chip-ile
+  const chip=document.getElementById('user-chip');
+  if(chip){
+    let badge=chip.querySelector('.tier-badge');
+    if(badge)badge.remove();
+    if(tier==='premium'||tier==='guide'){
+      badge=document.createElement('span');
+      badge.className='tier-badge';
+      badge.textContent=tier==='guide'?'⭐ Juht':'⭐ Pro';
+      badge.title='Premium kasutaja';
+      chip.insertBefore(badge, chip.querySelector('span:last-child'));
+    }
+  }
+  // Lisa info kasutaja menüüsse
+  const menu=document.getElementById('user-menu');
+  if(menu){
+    let tierInfo=menu.querySelector('.menu-tier-info');
+    if(!tierInfo){
+      tierInfo=document.createElement('div');
+      tierInfo.className='menu-tier-info';
+      menu.insertBefore(tierInfo, menu.firstChild);
+    }
+    if(tier==='guest'){
+      tierInfo.style.display='none';
+    } else if(tier==='premium'||tier==='guide'){
+      const untilStr=currentUserProfile.premiumUntil?
+        ' (kehtib kuni '+(currentUserProfile.premiumUntil.toDate?currentUserProfile.premiumUntil.toDate():new Date(currentUserProfile.premiumUntil)).toLocaleDateString('et-EE')+')':
+        '';
+      tierInfo.innerHTML='⭐ <b>'+(tier==='guide'?'Matkajuht':'Premium')+'</b>'+untilStr;
+      tierInfo.style.display='block';
+    } else {
+      tierInfo.innerHTML='<span style="color:var(--text3)">🆓 Tasuta kasutaja</span>';
+      tierInfo.style.display='block';
+    }
+  }
+}
 
 // =============== CHAT (FIRESTORE) ===============
 

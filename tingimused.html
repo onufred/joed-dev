@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kasutustingimused — Veeretked.ee</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f0ede8; --surface: #faf9f7; --surface2: #e8e4dd; --border: #d4cfc6;
+    --text: #1a1916; --text2: #6b6660; --text3: #9b958e;
+    --accent: #2d5a3d; --orange: #d97706; --red: #8b1a1a;
+  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 40px 20px; }
+  .container { max-width: 760px; margin: 0 auto; background: var(--surface); padding: 40px; border-radius: 14px; border: 1px solid var(--border); }
+  h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; color: var(--accent); }
+  h2 { font-size: 20px; font-weight: 600; margin: 28px 0 12px; color: var(--text); }
+  h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; color: var(--text); }
+  p { margin-bottom: 12px; color: var(--text2); }
+  ul, ol { padding-left: 22px; margin-bottom: 12px; color: var(--text2); }
+  li { margin-bottom: 6px; }
+  .meta { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text3); padding-bottom: 18px; border-bottom: 1px solid var(--surface2); margin-bottom: 24px; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent); }
+  a:hover { background: rgba(45, 90, 61, 0.08); }
+  .warning { background: #fde0e0; border-left: 3px solid var(--red); padding: 14px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 14px; color: var(--text); }
+  .warning b { color: var(--red); }
+  .highlight { background: #fdecd8; border-left: 3px solid var(--orange); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 14px 0; font-size: 14px; }
+  .info { background: #e0f2ea; border-left: 3px solid var(--accent); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 14px 0; font-size: 14px; }
+  .back-link { display: inline-block; margin-bottom: 16px; font-size: 13px; color: var(--text2); border-bottom: none; }
+  .back-link:hover { color: var(--accent); background: transparent; }
+  @media (max-width: 600px) {
+    body { padding: 20px 12px; }
+    .container { padding: 24px 18px; }
+    h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="./" class="back-link">← Tagasi äppi</a>
+  <h1>Kasutustingimused</h1>
+  <div class="meta">
+    Veeretked.ee — Jõgede veetasemete äpp<br>
+    Viimati uuendatud: 29. aprill 2026<br>
+    Kehtiv alates: 29. aprill 2026
+  </div>
+
+  <div class="warning">
+    <b>⚠️ TÄHTIS HOIATUS — Loe see esmalt!</b><br><br>
+    Veeretked.ee äpp on <b>informatiivne tööriist</b>, mitte ohutuse tagatis. Aerumatkad ja paadisõit jõgedel on <b>oma vastutusel</b>. Veetasemete andmed ja teekonna info võivad olla vananenud, ebatäpsed või vigased. Otsus jõele minna ja hinnang oma võimete kohta on <b>üksnes kasutaja vastutusel</b>.
+  </div>
+
+  <h2>1. Üldine</h2>
+  <p>Käesolevad kasutustingimused (edaspidi „tingimused") reguleerivad veeretked.ee veebiäpi (edaspidi „äpp") kasutamist. Äpi haldaja on <b>OÜ Uugi Invest</b> (registrikood 16356124, aadress Uugi, Pällu küla, 49314 Mustvee vald, Jõgeva maakond), edaspidi „meie".</p>
+  <p>Äppi kasutades nõustute käesolevate tingimustega. Kui te tingimustega ei nõustu, palun ärge äppi kasutage.</p>
+
+  <h2>2. Mida äpp pakub</h2>
+  <p>Veeretked.ee äpp pakub:</p>
+  <ul>
+    <li>Eesti ja Läti jõgede veetasemete kuvamist Riigi Ilmateenistuse ja Latvian Environment, Geology and Meteorology Centre (LVĢMC) avalike andmete põhjal</li>
+    <li>Jõgede teekondade ja sissepanu/väljavõtu kohtade infot</li>
+    <li>Ilmaprognoosi kuvamist Open-Meteo avaliku API kaudu</li>
+    <li>Asukoha jälgimise võimalust (GPS) jõel sõidu ajal</li>
+    <li>Kasutajate vahelist vestlust jõe kohta</li>
+    <li>Veeretked.ee firma kontaktinfo edastamist matkateenuste päringuteks</li>
+  </ul>
+
+  <h2>3. Vastutuse piirang</h2>
+
+  <div class="warning">
+    <b>Äpi info ei asenda professionaalset hinnangut, kohalike tundjate nõu ega isiklikku vee-elu kogemust.</b>
+  </div>
+
+  <h3>3.1 Kasutaja oma vastutus</h3>
+  <p>Kasutaja mõistab ja nõustub, et:</p>
+  <ul>
+    <li>Aerutamine, raftiing ja muu paadisõit on tegevused, millega kaasnevad <b>terviseriskid ja oht elule</b></li>
+    <li>Otsuse jõele minna teeb kasutaja ise, hinnates oma oskusi, varustust ja tingimusi</li>
+    <li>Veetasemete andmed võivad olla vananenud (kuni mitu tundi) või ebatäpsed</li>
+    <li>Sissepanu kohtade ja teekondade info võib olla muutunud (puud, kärestikud, muud takistused)</li>
+    <li>Ilmaprognoos on hinnanguline ja võib reaalsusega erineda</li>
+    <li>Vesi võib oma seisundit kiiresti muuta (vihm, üleujutus, jää)</li>
+  </ul>
+
+  <h3>3.2 Meie vastutus</h3>
+  <p>OÜ Uugi Invest <b>ei vastuta</b>:</p>
+  <ul>
+    <li>Äpi info õigsuse, terviklikkuse ega ajakohasuse eest</li>
+    <li>Õnnetuste, vigastuste ega varakao eest, mis on tekkinud äpi kasutamisest või selles oleva info põhjal otsuste tegemisest</li>
+    <li>Kolmandate osapoolte teenuste (Google, Firebase, BRouter, Open-Meteo, Riigi Ilmateenistus, LVĢMC) töökindluse eest</li>
+    <li>Äpi ajutise mittetöötamise või andmete kao eest</li>
+    <li>Teiste kasutajate vestluses jagatud info õigsuse eest</li>
+  </ul>
+
+  <p>Vastutuse piirang kehtib seadusega lubatud maksimaalses ulatuses.</p>
+
+  <h2>4. Kasutaja konto ja sisselogimine</h2>
+  <p>Mõnede äpi funktsioonide kasutamiseks (näiteks vestlus) on vajalik sisselogimine Google'i kaudu. Sisselogimisel kogume andmeid, mis on kirjeldatud <a href="./privaatsus.html">privaatsuspoliitikas</a>.</p>
+  <ul>
+    <li>Olete vastutav oma Google'i konto turvalisuse eest</li>
+    <li>Te ei tohi luua kontot teise inimese nime või andmetega</li>
+    <li>Üks kasutaja võib omada üht kontot</li>
+  </ul>
+
+  <h2>5. Vestluse reeglid</h2>
+  <p>Äpis on iga jõe kohta vestlusvõimalus, kus saab jagada infot teiste kasutajatega. Vestlust kasutades nõustute järgmiste reeglitega:</p>
+
+  <h3>5.1 Lubatud sisu</h3>
+  <ul>
+    <li>Info jõe seisundi kohta (vesi, takistused, sõidutingimused)</li>
+    <li>Hoiatused ohtude eest (kärestik, puu vees, jää, üleujutus)</li>
+    <li>Kogemuste jagamine (näiteks „Sõitsin täna Avijõel...")</li>
+    <li>Küsimused ja vastused teistele sõitjatele</li>
+    <li>Kohalikud nõuanded (parkla asukohad, teenuste pakkujad jne)</li>
+  </ul>
+
+  <h3>5.2 Keelatud sisu</h3>
+  <p>Vestluses ei ole lubatud postitada:</p>
+  <ul>
+    <li>Solvavat, ähvardavat, vihakõnet sisaldavat või diskrimineerivat sisu</li>
+    <li>Spämmi, reklaame ilma kontekstita, lingi-spämmi</li>
+    <li>Pornograafilist, vägivaldset või seadusvastast sisu</li>
+    <li>Teiste isikute eraelulist infot ilma nende loata</li>
+    <li>Eksitavat infot, mis võib põhjustada teistele kahju (näiteks „kärestiku pole" kui see on)</li>
+    <li>Reklaami kommertspakkumistele ilma meie loata</li>
+    <li>Sisu, mis rikub kolmandate osapoolte intellektuaalomandit</li>
+  </ul>
+
+  <h3>5.3 Modereerimine</h3>
+  <p>Me jätame endale õiguse:</p>
+  <ul>
+    <li>Eemaldada igasuguse sisu, mis rikub neid tingimusi</li>
+    <li>Blokeerida või kustutada kasutaja konto, kes neid tingimusi süstemaatiliselt rikub</li>
+    <li>Edastada raskemate rikkumiste korral info õiguskaitseasutustele</li>
+  </ul>
+
+  <p>Kasutajate sõnumid võivad olla kontrollitud automaatselt (AI moderation) või käsitsi.</p>
+
+  <h2>6. Intellektuaalne omand</h2>
+  <ul>
+    <li>Äpi disain, kood ja graafika kuuluvad OÜ-le Uugi Invest</li>
+    <li>Veetasemete andmed kuuluvad Riigi Ilmateenistusele ja LVĢMC-le (avalikud andmed)</li>
+    <li>Kaardiandmed kuuluvad OpenStreetMap kogukonnale (ODbL litsents)</li>
+    <li>Ilmaprognoos kuulub Open-Meteo'le</li>
+    <li>Teie postitatud sõnumid kuuluvad teile, kuid annate meile loa neid äpis kuvada ja säilitada</li>
+  </ul>
+
+  <h2>7. Maksed ja teenused</h2>
+  <p>Äpi kasutamine on <b>tasuta</b>. Äpi kaudu pakutavad matkateenused (paadid, juhendaja, transport jms) on tellitavad eraldi OÜ-st Uugi Invest või kolmandatelt teenuse­pakkujatelt vastavalt nende endi tingimustele.</p>
+  <p>Tellimuse vormistamisel kohaldatakse vastava teenusepakkuja tingimusi.</p>
+
+  <h2>8. Vanusepiirang</h2>
+  <p>Äpp on mõeldud kasutamiseks <b>13-aastastele ja vanematele</b>. Alla 16-aastane kasutaja peab sisselogimiseks saama vanema või seadusliku esindaja nõusoleku, vastavalt GDPR-i nõuetele.</p>
+
+  <h2>9. Tingimuste muudatused</h2>
+  <p>Me võime neid tingimusi aeg-ajalt muuta. Olulistest muudatustest teavitame äpi kaudu vähemalt 14 päeva enne nende jõustumist. Pärast muudatust äpi edasine kasutamine tähendab tingimustega nõustumist.</p>
+
+  <h2>10. Lõpetamine</h2>
+  <ul>
+    <li>Te võite igal hetkel äpi kasutamise lõpetada</li>
+    <li>Kustutada saate oma konto saates e-maili aadressile <a href="mailto:info@veeretked.ee">info@veeretked.ee</a></li>
+    <li>Me võime teie konto blokeerida või kustutada nende tingimuste rikkumise korral</li>
+  </ul>
+
+  <h2>11. Kohaldatav õigus ja vaidluste lahendamine</h2>
+  <p>Käesolevatele tingimustele kohaldatakse Eesti Vabariigi õigust. Kõik vaidlused lahendatakse esmalt läbirääkimiste teel. Kui kokkulepe ei õnnestu, lahendatakse vaidlus Eesti kohtutes.</p>
+  <p>Tarbijal on õigus pöörduda <a href="https://www.tarbijakaitseamet.ee" target="_blank">Tarbijakaitse ja Tehnilise Järelevalve Ametisse</a> või Euroopa Liidu <a href="https://ec.europa.eu/consumers/odr" target="_blank">veebipõhise vaidluste lahendamise platvormi</a> kaudu.</p>
+
+  <h2>12. Kontakt</h2>
+  <ul>
+    <li>📧 E-post: <a href="mailto:info@veeretked.ee">info@veeretked.ee</a></li>
+    <li>🌐 Veebileht: <a href="https://veeretked.ee" target="_blank">veeretked.ee</a></li>
+    <li>📍 OÜ Uugi Invest, registrikood 16356124</li>
+    <li>📍 Aadress: Uugi, Pällu küla, 49314 Mustvee vald, Jõgeva maakond</li>
+  </ul>
+
+  <p style="margin-top: 30px; font-size: 13px; color: var(--text3); text-align: center;">
+    Vt ka: <a href="./privaatsus.html">Privaatsuspoliitika</a>
+  </p>
+</div>
+</body>
+</html>

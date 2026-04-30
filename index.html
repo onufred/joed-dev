@@ -323,7 +323,9 @@
     <button class="btn" id="rbtn" onclick="refreshAll()">↻ Uuenda</button>
     <button class="btn" id="reset-btn" onclick="resetDefaults()" title="Lähtesta vaikimisi nimekiri" style="display:none;">🔄 Lähtesta</button>
     <button class="btn" id="export-btn" onclick="exportSettings()" style="display:none;">📤 Ekspordi</button>
+    <button class="btn" id="matkad-btn" onclick="openMyMatkad()" style="display:none;">⛵ Mu matkad</button>
     <button class="btn btn-primary" id="add-btn" onclick="openM()" style="display:none;">+ Lisa jõgi</button>
+    <button class="btn btn-primary" id="newtrip-btn" onclick="openCreateMatk()" style="display:none;background:linear-gradient(135deg,#1d4ed8,#1e3a8a);">⛵ Loo matk</button>
     <div id="auth-area">
       <button class="btn" id="login-btn" onclick="doLogin()">🔐 Logi sisse</button>
       <div id="user-chip" style="display:none;" onclick="toggleUserMenu()" title="Klõpsa profiili menüü jaoks">
@@ -575,6 +577,8 @@ let loigud=[]; // Jõgede lõigud (avalikud Sheetsist)
 let userLoigud=[]; // Kasutaja oma lõigud (Firestore'ist)
 let punktid=[]; // Lõikude punktid (veeskamine, laager, jne)
 let activeLoik=null; // Praegu vaadeldav lõik
+let myMatkad=[]; // Minu loodud matkad (kui olen matkajuht/admin)
+let myLepinguMallid=[]; // Minu salvestatud lepingu mallid
 let vMap=null; // Leaflet map instance
 let gpsWatchId=null; // GPS jälgimise ID
 let gpsMarker=null; // Sinine täpp kaardil
@@ -2432,6 +2436,12 @@ function updatePremiumUI(){
   // Lisa jõgi - kõigil sisselogitutel (saab lisada uusi vaikimisi nimekirja)
   const addBtn=document.getElementById('add-btn');
   if(addBtn)addBtn.style.display=currentUser?'inline-block':'none';
+  // Loo matk - ainult Premium+, Guide+, Admin
+  const newTripBtn=document.getElementById('newtrip-btn');
+  if(newTripBtn)newTripBtn.style.display=canCreateLoik()?'inline-block':'none';
+  // Mu matkad - ainult matkajuhile/admin-ile
+  const matkadBtn=document.getElementById('matkad-btn');
+  if(matkadBtn)matkadBtn.style.display=isGuide()?'inline-block':'none';
   // Lae kasutaja oma lõigud (kui premium+)
   if(canCreateLoik()){
     loadUserLoigud();
@@ -2726,6 +2736,336 @@ async function submitCreateLoik(){
     setTimeout(()=>openV(jogi), 200);
   }
 }
+
+// =============== MATKAD (matkajuhi funktsioonid) ===============
+
+// Genereeri lühike unikaalne kood (8 tähekombinatsiooni)
+function generateMatkaCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Ilma segavaid (I,O,1,0)
+  let s='';
+  for(let i=0;i<8;i++)s+=chars.charAt(Math.floor(Math.random()*chars.length));
+  return s;
+}
+
+// Lae kasutaja matkad
+async function loadMyMatkad(){
+  if(!currentUser||!window.fb||!isGuide()){myMatkad=[];return;}
+  try{
+    const fb=window.fb;
+    const q=fb.query(
+      fb.collection(fb.db, 'matkad'),
+      fb.where('guideUid', '==', currentUser.uid)
+    );
+    const snap=await new Promise((resolve, reject)=>{
+      const unsub=fb.onSnapshot(q, (s)=>{unsub(); resolve(s);}, reject);
+    });
+    const arr=[];
+    snap.forEach(doc=>{
+      const d=doc.data();
+      arr.push({
+        id: doc.id,
+        ...d,
+        algusAeg: d.algusAeg&&d.algusAeg.toDate?d.algusAeg.toDate():null,
+        createdAt: d.createdAt&&d.createdAt.toDate?d.createdAt.toDate():null
+      });
+    });
+    // Sorteeri kuupäeva järgi (uusimad/tulevased ülal)
+    arr.sort((a,b)=>{
+      if(!a.algusAeg&&!b.algusAeg)return 0;
+      if(!a.algusAeg)return 1;
+      if(!b.algusAeg)return -1;
+      return b.algusAeg.getTime()-a.algusAeg.getTime();
+    });
+    myMatkad=arr;
+  }catch(err){
+    console.warn('Matkade laadimine ebaõnnestus:', err);
+    myMatkad=[];
+  }
+}
+
+// Lae kasutaja lepingu mallid
+async function loadMyLepinguMallid(){
+  if(!currentUser||!window.fb||!isGuide()){myLepinguMallid=[];return;}
+  try{
+    const fb=window.fb;
+    const q=fb.query(
+      fb.collection(fb.db, 'lepingumallid'),
+      fb.where('uid', '==', currentUser.uid)
+    );
+    const snap=await new Promise((resolve, reject)=>{
+      const unsub=fb.onSnapshot(q, (s)=>{unsub(); resolve(s);}, reject);
+    });
+    const arr=[];
+    snap.forEach(doc=>{arr.push({id: doc.id, ...doc.data()});});
+    myLepinguMallid=arr;
+  }catch(err){
+    console.warn('Lepingumallide laadimine ebaõnnestus:', err);
+    myLepinguMallid=[];
+  }
+}
+
+// Salvesta uus matk
+async function saveMatk(data){
+  if(!currentUser||!window.fb)return null;
+  if(!isGuide()){alert('See on matkajuhi funktsioon');return null;}
+  try{
+    const fb=window.fb;
+    const matkaCode=generateMatkaCode();
+    const matkaData={
+      guideUid: currentUser.uid,
+      guideName: currentUser.displayName||currentUser.email||'Matkajuht',
+      guideEmail: currentUser.email||'',
+      nimi: data.nimi||'',
+      jogi: data.jogi||'',
+      loik: data.loik||'',
+      algusAeg: data.algusAeg||null,
+      maxOsalejaid: data.maxOsalejaid||null,
+      hind: data.hind||'',
+      lepinguTekst: data.lepinguTekst||'',
+      markused: data.markused||'',
+      matkaCode: matkaCode,
+      status: 'aktiivne', // 'aktiivne', 'kestab', 'lopetatud', 'tuhistatud'
+      createdAt: fb.serverTimestamp()
+    };
+    const ref=await fb.addDoc(fb.collection(fb.db, 'matkad'), matkaData);
+    await loadMyMatkad();
+    return {id: ref.id, matkaCode};
+  }catch(err){
+    console.error('Matka salvestamine ebaõnnestus:', err);
+    alert('Salvestamine ebaõnnestus: '+(err.message||err.code));
+    return null;
+  }
+}
+
+// Salvesta lepingu mall
+async function saveLepinguMall(nimi, tekst){
+  if(!currentUser||!window.fb||!isGuide())return null;
+  try{
+    const fb=window.fb;
+    const ref=await fb.addDoc(fb.collection(fb.db, 'lepingumallid'), {
+      uid: currentUser.uid,
+      nimi: nimi||'Mall',
+      tekst: tekst||'',
+      createdAt: fb.serverTimestamp()
+    });
+    await loadMyLepinguMallid();
+    return ref.id;
+  }catch(err){
+    console.error('Malli salvestamine ebaõnnestus:', err);
+    return null;
+  }
+}
+
+// Kustuta matk
+async function deleteMatk(matkaId){
+  if(!currentUser||!window.fb)return;
+  if(!confirm('Kustuta see matk? Seda ei saa tagasi võtta.'))return;
+  try{
+    const fb=window.fb;
+    await fb.deleteDoc(fb.doc(fb.db, 'matkad', matkaId));
+    await loadMyMatkad();
+    renderMyMatkad();
+  }catch(err){
+    console.error('Kustutamine ebaõnnestus:', err);
+    alert('Kustutamine ebaõnnestus: '+(err.message||err.code));
+  }
+}
+
+// Ava "Mu matkad" modal
+async function openMyMatkad(){
+  if(!isGuide()){
+    alert('See on matkajuhi funktsioon. Vajad Matkajuhi või Admini staatust.');
+    return;
+  }
+  document.getElementById('mmmodal').classList.add('open');
+  document.getElementById('mm-list').innerHTML='<div style="padding:30px;text-align:center;color:var(--text3);">⏳ Laen matku...</div>';
+  await loadMyMatkad();
+  renderMyMatkad();
+}
+
+function closeMyMatkad(){
+  document.getElementById('mmmodal').classList.remove('open');
+}
+
+// Renderda matkade nimekiri
+function renderMyMatkad(){
+  const el=document.getElementById('mm-list');
+  if(!el)return;
+  if(myMatkad.length===0){
+    el.innerHTML='<div style="padding:30px 12px;text-align:center;color:var(--text3);font-size:13px;">Veel pole matku loodud.<br>Vajuta "+ Loo uus matk" et alustada.</div>';
+    return;
+  }
+  let html='';
+  for(const m of myMatkad){
+    const dateStr=m.algusAeg?m.algusAeg.toLocaleDateString('et-EE',{day:'numeric',month:'long',year:'numeric'})+' '+m.algusAeg.toLocaleTimeString('et-EE',{hour:'2-digit',minute:'2-digit'}):'(kuupäev määramata)';
+    const isPast=m.algusAeg&&m.algusAeg.getTime()<Date.now();
+    const linkUrl=window.location.origin+window.location.pathname+'?join='+m.matkaCode;
+    html+=`<div class="mm-card ${isPast?'past':''}">
+      <div class="mm-card-head">
+        <div>
+          <div class="mm-card-title">${escapeHtml(m.nimi||'(ilma nimeta)')}</div>
+          <div class="mm-card-meta">${escapeHtml(m.jogi||'')}${m.loik?' · '+escapeHtml(m.loik):''}</div>
+          <div class="mm-card-meta">📅 ${dateStr}</div>
+        </div>
+        <div class="mm-card-status ${isPast?'past':'active'}">${isPast?'Möödas':'Aktiivne'}</div>
+      </div>
+      <div class="mm-card-link">
+        <span style="font-size:11px;color:var(--text3);">🔗 Jagatav link:</span>
+        <input type="text" readonly value="${linkUrl}" onclick="this.select()" style="width:100%;padding:6px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;margin-top:3px;"/>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button class="ibtn" onclick="copyMatkaLink('${linkUrl.replace(/'/g,"\\'")}')">📋 Kopeeri</button>
+          <button class="ibtn" onclick="shareMatkaLink('${escapeHtml(m.nimi||'').replace(/'/g,"\\'")}', '${linkUrl.replace(/'/g,"\\'")}')">📤 Jaga</button>
+        </div>
+      </div>
+      <div class="mm-card-actions">
+        <button class="ibtn" onclick="deleteMatk('${m.id}')" style="color:var(--red);border-color:rgba(220,38,38,0.3);">🗑 Kustuta</button>
+      </div>
+    </div>`;
+  }
+  el.innerHTML=html;
+}
+
+// Kopeeri matka link
+function copyMatkaLink(url){
+  navigator.clipboard.writeText(url).then(()=>{
+    alert('Link kopeeritud! Saad selle nüüd jagada klientidega (WhatsApp, e-mail jne)');
+  }).catch(()=>{
+    // Vana brauser - näita link
+    prompt('Kopeeri link:', url);
+  });
+}
+
+// Jaga matka link (Web Share API)
+function shareMatkaLink(nimi, url){
+  if(navigator.share){
+    navigator.share({
+      title: 'Liitu matkaga: '+nimi,
+      text: 'Sind on kutsutud matkale "'+nimi+'". Vajuta lingile, et liituda:',
+      url: url
+    }).catch(err=>{
+      if(err.name!=='AbortError')console.warn('Jagamine ebaõnnestus:', err);
+    });
+  } else {
+    copyMatkaLink(url);
+  }
+}
+
+// Ava "Loo uus matk" vorm
+async function openCreateMatk(){
+  if(!isGuide()){alert('See on matkajuhi funktsioon');return;}
+  // Tühjenda väljad
+  document.getElementById('cm-nimi').value='';
+  document.getElementById('cm-jogi').value='';
+  document.getElementById('cm-loik').value='';
+  document.getElementById('cm-aeg').value='';
+  document.getElementById('cm-max').value='';
+  document.getElementById('cm-hind').value='';
+  document.getElementById('cm-leping').value=defaultLepinguTekst();
+  document.getElementById('cm-markused').value='';
+  // Lae lepingu mallid
+  await loadMyLepinguMallid();
+  renderLepingumallid();
+  document.getElementById('cmnewmodal').classList.add('open');
+}
+
+function closeCreateMatk(){
+  document.getElementById('cmnewmodal').classList.remove('open');
+}
+
+// Renderda lepingu mallide nimekiri (vali rippmenüüst)
+function renderLepingumallid(){
+  const sel=document.getElementById('cm-leping-mall');
+  if(!sel)return;
+  let html='<option value="">— Vali mall —</option>';
+  html+='<option value="__default__">Vaikimisi mall (omavastutus)</option>';
+  for(const m of myLepinguMallid){
+    html+=`<option value="${m.id}">${escapeHtml(m.nimi||'Mall')}</option>`;
+  }
+  sel.innerHTML=html;
+}
+
+// Vaikimisi lepingu tekst
+function defaultLepinguTekst(){
+  return `OMAVASTUTUSE LEPING JA ENESEDEKLARATSIOON
+
+Mina, [osaleja nimi], olen teadlik, et veematkamine on füüsilist pingutust nõudev tegevus, mis võib olla seotud erinevate riskidega (uppumine, jahedus, vigastused jms).
+
+Liitumisega kinnitan:
+1. Olen heas füüsilises ja vaimses tervises ning sobib veematkale.
+2. Olen teadlik matka raskusastmest ja minu oskused on selleks piisavad.
+3. Mul ei ole tervisemured, mis võiksid takistada osalemist (südamehaigused, krambid jms). Vajadusel olen sellest matkajuhile teatanud.
+4. Lapsed alla 12 aasta osalevad ainult vanema/hooldaja vastutusel.
+5. Kannan kogu matka jooksul päästevesti.
+6. Järgin matkajuhi juhiseid ja ohutuse reegleid.
+7. Mõistan, et matkajuht ei vastuta minu enda hooletusest tekkinud kahjude eest.
+8. Annan loa minu asukoha jagamiseks matka ajal matkajuhile (turvalisuse tagamiseks).
+
+Nõustun, et minu nõustumine kuvatakse ajatempliga ja Google'i kontoga ning loetakse õiguslikuks digitaalseks allkirjaks.`;
+}
+
+// Vali mall rippmenüüst
+function applyLepinguMall(){
+  const sel=document.getElementById('cm-leping-mall');
+  if(!sel)return;
+  const val=sel.value;
+  const tekst=document.getElementById('cm-leping');
+  if(!tekst)return;
+  if(val==='__default__'){
+    tekst.value=defaultLepinguTekst();
+  } else if(val){
+    const m=myLepinguMallid.find(mm=>mm.id===val);
+    if(m)tekst.value=m.tekst||'';
+  }
+}
+
+// Salvesta praegune lepingu tekst uue mallina
+async function saveCurrentAsMall(){
+  const tekst=document.getElementById('cm-leping').value.trim();
+  if(!tekst){alert('Lepingu tekst on tühi');return;}
+  const nimi=prompt('Anna mallile nimi (nt "Päeva matk omavastutus"):');
+  if(!nimi)return;
+  const id=await saveLepinguMall(nimi, tekst);
+  if(id){
+    alert('Mall salvestatud!');
+    renderLepingumallid();
+  }
+}
+
+// Salvesta uus matk
+async function submitCreateMatk(){
+  const nimi=document.getElementById('cm-nimi').value.trim();
+  const jogi=document.getElementById('cm-jogi').value.trim();
+  const loik=document.getElementById('cm-loik').value.trim();
+  const aegStr=document.getElementById('cm-aeg').value;
+  const max=parseInt(document.getElementById('cm-max').value);
+  const hind=document.getElementById('cm-hind').value.trim();
+  const leping=document.getElementById('cm-leping').value.trim();
+  const markused=document.getElementById('cm-markused').value.trim();
+  if(!nimi){alert('Sisesta matka nimi');return;}
+  if(!jogi){alert('Sisesta jõgi');return;}
+  if(!leping){alert('Lepingu tekst on tühi');return;}
+  let algusAeg=null;
+  if(aegStr){
+    algusAeg=new Date(aegStr);
+    if(isNaN(algusAeg.getTime())){alert('Vigane kuupäev');return;}
+  }
+  const result=await saveMatk({
+    nimi, jogi, loik, algusAeg,
+    maxOsalejaid: isNaN(max)?null:max,
+    hind, lepinguTekst: leping, markused
+  });
+  if(result){
+    closeCreateMatk();
+    renderMyMatkad();
+    // Näita kohe loodud lingi-info
+    const linkUrl=window.location.origin+window.location.pathname+'?join='+result.matkaCode;
+    if(confirm('Matk loodud! 🎉\n\nLink jagamiseks:\n'+linkUrl+'\n\nKas tahad kohe kopeerida?')){
+      copyMatkaLink(linkUrl);
+    }
+  }
+}
+
+
 
 // =============== CHAT (FIRESTORE) ===============
 

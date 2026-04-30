@@ -687,7 +687,7 @@
       <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px;">➕ Uus mall</div>
       <input id="km-uus-nimi" type="text" placeholder="Malli nimi (nt 'Standard tagasiside')" style="width:100%;margin-bottom:6px;"/>
       <div id="km-uus-read" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px;"></div>
-      <button onclick="lisaKmRida()" style="font-size:11px;padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;margin-bottom:8px;">+ Lisa küsimus</button>
+      <button onclick="lisaKmKusimus()" style="font-size:11px;padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;margin-bottom:8px;">+ Lisa küsimus</button>
       <button class="btn btn-primary" onclick="submitUusKusitlusMall()" style="width:100%;">💾 Salvesta mall</button>
     </div>
     <div class="mact" style="margin-top:12px;">
@@ -4489,8 +4489,8 @@ async function submitCreateMatk(){
   const markused=document.getElementById('cm-markused').value.trim();
   // Varustuse nimekiri
   const varustus=[...document.querySelectorAll('.cm-varustus-item')].map(i=>i.value.trim()).filter(Boolean);
-  // Tagasiside küsimused
-  const kusitlus=[...document.querySelectorAll('.cm-kusimus-item')].map(i=>i.value.trim()).filter(Boolean);
+  // Tagasiside küsimused (uus objekt-formaat)
+  const kusitlus=readKusitlusFromForm();
   if(!nimi){alert('Sisesta matka nimi');return;}
   if(!jogi){alert('Sisesta jõgi');return;}
   if(!leping){alert('Lepingu tekst on tühi');return;}
@@ -4526,14 +4526,93 @@ function lisaVarustuseRida(val=''){
 }
 
 // Küsimuse lisamine
-function lisaKusitlusKusimus(val=''){
+// Küsimuse lisamine — toetab teksti ja valikuid
+function lisaKusitlusKusimus(q=null){
+  // q võib olla string (vana formaat) või {tekst, tyyp, valikud}
   const list=document.getElementById('cm-kusitlus-list');
   if(!list)return;
+  const id='kq-'+Date.now()+'-'+Math.random().toString(36).slice(2,6);
+  const tekst=typeof q==='string'?q:(q?.tekst||'');
+  const tyyp=typeof q==='string'?'tekst':(q?.tyyp||'tekst');
+  const valikud=q?.valikud||[];
   const div=document.createElement('div');
-  div.style.cssText='display:flex;gap:6px;align-items:center;';
-  div.innerHTML=`<input class="cm-kusimus-item" type="text" value="${escapeHtml(val)}" placeholder="nt Kuidas meeldis? Mis läks hästi?" style="flex:1;font-size:12px;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;"/>
-    <button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:14px;padding:4px;">✕</button>`;
+  div.id=id;
+  div.style.cssText='background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:2px;';
+  div.innerHTML=`
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+      <input class="cm-kusimus-tekst" type="text" value="${escapeHtml(tekst)}" placeholder="Küsimuse tekst..." style="flex:1;font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;"/>
+      <select class="cm-kusimus-tyyp" onchange="onKusimusTyypChange('${id}')" style="font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;">
+        <option value="tekst"${tyyp==='tekst'?' selected':''}>📝 Vabatekst</option>
+        <option value="valik"${tyyp==='valik'?' selected':''}>☑️ Valikud</option>
+        <option value="hinne"${tyyp==='hinne'?' selected':''}>⭐ Hinne 1–5</option>
+      </select>
+      <button onclick="document.getElementById('${id}').remove()" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:16px;padding:2px 4px;">✕</button>
+    </div>
+    <div class="cm-kusimus-valikud" style="display:${tyyp==='valik'?'block':'none'};">
+      <div class="cm-valikud-list" style="display:flex;flex-direction:column;gap:3px;margin-bottom:4px;"></div>
+      <button onclick="lisaValik('${id}')" style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text3);cursor:pointer;font-family:'DM Sans',sans-serif;">+ Lisa valik</button>
+    </div>
+    <div class="cm-kusimus-hinne-info" style="display:${tyyp==='hinne'?'flex':'none'};align-items:center;gap:6px;font-size:11px;color:var(--text3);">
+      <span>⭐ Kasutaja valib hinde 1 (halb) kuni 5 (suurepärane)</span>
+    </div>`;
   list.appendChild(div);
+  // Lisa olemasolevad valikud
+  if(tyyp==='valik'&&valikud.length>0){
+    valikud.forEach(v=>lisaValik(id,v));
+  } else if(tyyp==='valik'){
+    // Vaikimisi 3 tühja valikut
+    lisaValik(id,'');lisaValik(id,'');lisaValik(id,'');
+  }
+}
+
+function onKusimusTyypChange(id){
+  const el=document.getElementById(id);
+  if(!el)return;
+  const tyyp=el.querySelector('.cm-kusimus-tyyp').value;
+  const valikudDiv=el.querySelector('.cm-kusimus-valikud');
+  const hinneDiv=el.querySelector('.cm-kusimus-hinne-info');
+  valikudDiv.style.display=tyyp==='valik'?'block':'none';
+  hinneDiv.style.display=tyyp==='hinne'?'flex':'none';
+  // Lisa 3 vaikimisi valikut kui tühi
+  if(tyyp==='valik'&&el.querySelectorAll('.cm-valik-item').length===0){
+    lisaValik(id,'');lisaValik(id,'');lisaValik(id,'');
+  }
+}
+
+function lisaValik(kusimusId, val=''){
+  const el=document.getElementById(kusimusId);
+  if(!el)return;
+  const list=el.querySelector('.cm-valikud-list');
+  if(!list)return;
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;gap:5px;align-items:center;';
+  div.innerHTML=`<span style="font-size:11px;color:var(--text3);">○</span>
+    <input class="cm-valik-item" type="text" value="${escapeHtml(val)}" placeholder="Valik..." style="flex:1;font-size:12px;padding:4px 7px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;"/>
+    <button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:12px;padding:2px;">✕</button>`;
+  list.appendChild(div);
+}
+
+// Loe küsimused vormi DOM-ist
+function readKusitlusFromForm(){
+  const items=document.querySelectorAll('#cm-kusitlus-list > div[id^="kq-"]');
+  const result=[];
+  items.forEach(el=>{
+    const tekst=el.querySelector('.cm-kusimus-tekst')?.value?.trim()||'';
+    if(!tekst)return;
+    const tyyp=el.querySelector('.cm-kusimus-tyyp')?.value||'tekst';
+    const q={tekst,tyyp};
+    if(tyyp==='valik'){
+      q.valikud=[...el.querySelectorAll('.cm-valik-item')].map(i=>i.value.trim()).filter(Boolean);
+    }
+    result.push(q);
+  });
+  return result;
+}
+
+// Tagasiühilduvus: normaliseeri vana formaadi küsimused objektideks
+function normalizeKusitlus(arr){
+  if(!arr||!arr.length)return[];
+  return arr.map(q=>typeof q==='string'?{tekst:q,tyyp:'tekst'}:q);
 }
 
 // =============== VARUSTUSE MALLID ===============
@@ -4598,7 +4677,7 @@ function applyKusitlusMall(){
   const m=myKusitlusMallid.find(mm=>mm.id===id);
   if(!m||!m.read)return;
   document.getElementById('cm-kusitlus-list').innerHTML='';
-  m.read.forEach(r=>lisaKusitlusKusimus(r));
+  normalizeKusitlus(m.read).forEach(q=>lisaKusitlusKusimus(q));
 }
 
 async function saveVarustusMall(){
@@ -4614,7 +4693,7 @@ async function saveVarustusMall(){
 }
 
 async function saveKusitlusMall(){
-  const read=[...document.querySelectorAll('.cm-kusimus-item')].map(i=>i.value.trim()).filter(Boolean);
+  const read=readKusitlusFromForm();
   if(read.length===0){alert('Lisa kõigepealt vähemalt üks küsimus');return;}
   const nimi=prompt('Anna mallile nimi (nt "Standard tagasiside"):');
   if(!nimi)return;
@@ -4663,8 +4742,69 @@ function _mallRidaInput(val, cls, placeholder){
 function lisaVmRida(val=''){
   document.getElementById('vm-uus-read').appendChild(_mallRidaInput(val,'vm-rida-item','nt Päästevest, veekindel kott...'));
 }
-function lisaKmRida(val=''){
-  document.getElementById('km-uus-read').appendChild(_mallRidaInput(val,'km-rida-item','nt Kuidas meeldis matk?'));
+function lisaKmKusimus(q=null){
+  const container=document.getElementById('km-uus-read');
+  if(!container)return;
+  // Loob küsimusekomponendi mallide haldamise modalis
+  const id='kmq-'+Date.now()+'-'+Math.random().toString(36).slice(2,6);
+  const tekst=typeof q==='string'?q:(q?.tekst||'');
+  const tyyp=typeof q==='string'?'tekst':(q?.tyyp||'tekst');
+  const valikud=q?.valikud||[];
+  const div=document.createElement('div');
+  div.id=id;
+  div.style.cssText='background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:7px 9px;';
+  div.innerHTML=`
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:5px;">
+      <input class="km-kusimus-tekst" type="text" value="${escapeHtml(tekst)}" placeholder="Küsimuse tekst..." style="flex:1;font-size:12px;padding:4px 7px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;"/>
+      <select class="km-kusimus-tyyp" onchange="onKmTyypChange('${id}')" style="font-size:11px;padding:4px 7px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;">
+        <option value="tekst"${tyyp==='tekst'?' selected':''}>📝 Vabatekst</option>
+        <option value="valik"${tyyp==='valik'?' selected':''}>☑️ Valikud</option>
+        <option value="hinne"${tyyp==='hinne'?' selected':''}>⭐ Hinne 1–5</option>
+      </select>
+      <button onclick="document.getElementById('${id}').remove()" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:14px;padding:2px;">✕</button>
+    </div>
+    <div class="km-kusimus-valikud" style="display:${tyyp==='valik'?'block':'none'};">
+      <div class="km-valikud-list" style="display:flex;flex-direction:column;gap:3px;margin-bottom:3px;"></div>
+      <button onclick="lisaKmValik('${id}')" style="font-size:11px;padding:2px 7px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text3);cursor:pointer;font-family:'DM Sans',sans-serif;">+ Lisa valik</button>
+    </div>`;
+  container.appendChild(div);
+  if(tyyp==='valik'&&valikud.length>0){valikud.forEach(v=>lisaKmValik(id,v));}
+  else if(tyyp==='valik'){lisaKmValik(id,'');lisaKmValik(id,'');lisaKmValik(id,'');}
+}
+
+function onKmTyypChange(id){
+  const el=document.getElementById(id);if(!el)return;
+  const tyyp=el.querySelector('.km-kusimus-tyyp').value;
+  const vd=el.querySelector('.km-kusimus-valikud');
+  vd.style.display=tyyp==='valik'?'block':'none';
+  if(tyyp==='valik'&&el.querySelectorAll('.km-valik-item').length===0){
+    lisaKmValik(id,'');lisaKmValik(id,'');lisaKmValik(id,'');
+  }
+}
+
+function lisaKmValik(kusimusId,val=''){
+  const el=document.getElementById(kusimusId);if(!el)return;
+  const list=el.querySelector('.km-valikud-list');if(!list)return;
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;gap:4px;align-items:center;';
+  div.innerHTML=`<span style="font-size:11px;color:var(--text3);">○</span>
+    <input class="km-valik-item" type="text" value="${escapeHtml(val)}" placeholder="Valik..." style="flex:1;font-size:11px;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;"/>
+    <button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:11px;padding:1px;">✕</button>`;
+  list.appendChild(div);
+}
+
+function readKusitlusFromMallModal(){
+  const items=document.querySelectorAll('#km-uus-read > div[id^="kmq-"]');
+  const result=[];
+  items.forEach(el=>{
+    const tekst=el.querySelector('.km-kusimus-tekst')?.value?.trim()||'';
+    if(!tekst)return;
+    const tyyp=el.querySelector('.km-kusimus-tyyp')?.value||'tekst';
+    const q={tekst,tyyp};
+    if(tyyp==='valik') q.valikud=[...el.querySelectorAll('.km-valik-item')].map(i=>i.value.trim()).filter(Boolean);
+    result.push(q);
+  });
+  return result;
 }
 
 function renderVarustusMallideList(){
@@ -4694,8 +4834,10 @@ function renderKusitlusMallideList(){
     el.innerHTML='<div style="text-align:center;padding:14px;color:var(--text3);font-size:13px;border:1px dashed var(--border);border-radius:8px;">Veel pole ühtegi malli.</div>';
     return;
   }
-  el.innerHTML='<div style="display:flex;flex-direction:column;gap:6px;">'+myKusitlusMallid.map(m=>`
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+  const tyypIcon={tekst:'📝',valik:'☑️',hinne:'⭐'};
+  el.innerHTML='<div style="display:flex;flex-direction:column;gap:6px;">'+myKusitlusMallid.map(m=>{
+    const qs=normalizeKusitlus(m.read||[]);
+    return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
         <div style="font-size:13px;font-weight:600;color:var(--text);">📋 ${escapeHtml(m.nimi||'Mall')}</div>
         <div style="display:flex;gap:5px;">
@@ -4703,8 +4845,11 @@ function renderKusitlusMallideList(){
           <button onclick="deleteKusitlusMall('${m.id}')" style="font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid rgba(220,38,38,0.3);background:var(--surface);color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif;">🗑</button>
         </div>
       </div>
-      <ol style="margin:0;padding-left:16px;font-size:11px;color:var(--text3);">${(m.read||[]).map(r=>`<li>${escapeHtml(r)}</li>`).join('')}</ol>
-    </div>`).join('')+'</div>';
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        ${qs.map(q=>`<div style="font-size:11px;color:var(--text3);">${tyypIcon[q.tyyp]||'📝'} ${escapeHtml(q.tekst)}${q.tyyp==='valik'&&q.valikud?.length?` <span style="color:var(--text3);opacity:0.7;">(${q.valikud.join(', ')})</span>`:''}</div>`).join('')}
+      </div>
+    </div>`;
+  }).join('')+'</div>';
 }
 
 function editVarustusMall(id){
@@ -4720,7 +4865,7 @@ function editKusitlusMall(id){
   document.getElementById('km-uus-nimi').value=m.nimi||'';
   document.getElementById('km-uus-nimi').dataset.editId=id;
   document.getElementById('km-uus-read').innerHTML='';
-  (m.read||[]).forEach(r=>lisaKmRida(r));
+  normalizeKusitlus(m.read||[]).forEach(q=>lisaKmKusimus(q));
   document.getElementById('km-uus-nimi').scrollIntoView({behavior:'smooth'});
 }
 
@@ -4745,7 +4890,7 @@ async function submitUusVarustusMall(){
 
 async function submitUusKusitlusMall(){
   const nimi=document.getElementById('km-uus-nimi').value.trim();
-  const read=[...document.querySelectorAll('.km-rida-item')].map(i=>i.value.trim()).filter(Boolean);
+  const read=readKusitlusFromMallModal();
   const editId=document.getElementById('km-uus-nimi').dataset.editId;
   if(!nimi){alert('Anna mallile nimi');return;}
   if(read.length===0){alert('Lisa vähemalt üks küsimus');return;}

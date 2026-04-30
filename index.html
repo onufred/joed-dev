@@ -12,6 +12,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
   import { getFirestore, collection, query, where, orderBy, limit, addDoc, deleteDoc, doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+  import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js";
 
   // Tuvasta keskkond URL-i järgi
   const isDev = window.location.pathname.includes('/joed-dev') || window.location.hostname === 'localhost';
@@ -42,16 +43,16 @@
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
+  const storage = getStorage(app);
   const provider = new GoogleAuthProvider();
-  // Soovita kasutaja konto valikut iga kord (vältida vana sessiooni)
   provider.setCustomParameters({ prompt: 'select_account' });
 
-  // Tee globaalselt kättesaadavaks (et tavalisest <script> osast saaks kasutada)
   window.fb = {
-    auth, db, provider,
+    auth, db, storage, provider,
     signInWithPopup, signOut, onAuthStateChanged,
     collection, query, where, orderBy, limit,
     addDoc, deleteDoc, doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot,
+    storageRef, uploadBytes, getDownloadURL, deleteObject,
     isDev: isDev,
     projectId: firebaseConfig.projectId
   };
@@ -2182,10 +2183,24 @@ function initLoikMap(l, myPunktid){
     const emoji=tyypEmojis[p.tyyp]||'📍';
     const color=tyypColors[p.tyyp]||'#6b6660';
     const marker=L.marker(p.koor, {icon:makeMapIcon(emoji, color)}).addTo(vMap);
-    let popup=`<b>${p.nimi||p.tyyp}</b>`;
-    if(p.markused)popup+=`<br>${p.markused}`;
+    const punktId=makePunktId(p);
+    // Loo popup ID et saaks hiljem uuendada
+    const popupId='popup-'+punktId.replace(/[^a-z0-9]/gi,'_');
+    let popup=`<div id="${popupId}">
+      <b>${p.nimi||p.tyyp}</b>`;
+    if(p.markused)popup+=`<br><span style="font-size:11px;">${p.markused}</span>`;
     popup+=`<br><a href="https://www.google.com/maps?q=${p.koor[0]},${p.koor[1]}" target="_blank" style="font-size:11px;">📍 Google Mapsis</a>`;
-    marker.bindPopup(popup);
+    popup+=`<br><div id="fotod-${popupId}" style="margin-top:6px;"><span style="font-size:11px;color:#888;">⏳ Laen fotosid...</span></div>`;
+    if(canCreateLoik()){
+      popup+=`<br><label style="display:inline-block;margin-top:6px;padding:4px 10px;background:#2d5a3d;color:#fff;border-radius:5px;font-size:11px;cursor:pointer;font-family:sans-serif;">
+        📷 Lisa foto
+        <input type="file" accept="image/*" style="display:none;" onchange="uploadPunktFoto(this,'${punktId}','${escapeHtml(p.nimi||p.tyyp)}','${escapeHtml(p.jogi)}','${popupId}')"/>
+      </label>`;
+    }
+    popup+='</div>';
+    const lPopup=L.popup({maxWidth:240}).setContent(popup);
+    marker.bindPopup(lPopup);
+    marker.on('popupopen', ()=>loadPunktFotod(punktId, popupId));
   }
 
   // Sobita kaart kõigi punktide järgi (hiljem BRouter joon võib seda muuta)
@@ -2765,6 +2780,126 @@ function hideTripBar(){
   if(bar)bar.style.display='none';
   document.body.style.paddingBottom='0';
   if(window._tripBarInterval)clearInterval(window._tripBarInterval);
+}
+
+// =============== PUNKTI FOTOD ===============
+
+// Deterministlik ID punktile koordinaatide järgi
+function makePunktId(p){
+  const lat=(p.koor[0]||0).toFixed(4).replace('.','_');
+  const lng=(p.koor[1]||0).toFixed(4).replace('.','_');
+  const jogi=(p.jogi||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  return `${jogi}_${lat}_${lng}`;
+}
+
+// Lae punkti fotod Firestore'ist ja kuva popupis
+async function loadPunktFotod(punktId, popupId){
+  const el=document.getElementById('fotod-'+popupId);
+  if(!el||!window.fb)return;
+  try{
+    const fb=window.fb;
+    const snap=await new Promise((resolve,reject)=>{
+      const unsub=fb.onSnapshot(
+        fb.query(fb.collection(fb.db,'punktFotod',punktId,'fotod'),fb.orderBy('ts','desc'),fb.limit(10)),
+        s=>{unsub();resolve(s);},reject
+      );
+    });
+    if(snap.empty){
+      el.innerHTML='<span style="font-size:11px;color:#999;">Fotosid pole veel</span>';
+      return;
+    }
+    let html='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;">';
+    snap.forEach(doc=>{
+      const d=doc.data();
+      const fotoId=doc.id;
+      const isMine=currentUser&&d.uploaderUid===currentUser.uid;
+      html+=`<div style="position:relative;">
+        <img src="${escapeHtml(d.url)}" onclick="openFotoFullscreen('${escapeHtml(d.url)}')"
+          style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid #ddd;"
+          title="${escapeHtml(d.uploaderName||'')} · ${d.ts?.toDate?.()?.toLocaleDateString('et-EE')||''}"
+          alt="foto"/>
+        ${isMine?`<button onclick="deletePunktFoto('${punktId}','${fotoId}','${escapeHtml(d.storagePath||'')}','${popupId}')"
+          style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:3px;font-size:9px;cursor:pointer;padding:1px 4px;line-height:1.4;">✕</button>`:''}
+      </div>`;
+    });
+    html+='</div>';
+    el.innerHTML=html;
+  }catch(err){
+    el.innerHTML='<span style="font-size:11px;color:#c00;">⚠️ Viga</span>';
+    console.warn('Fotode laadimine ebaõnnestus:', err);
+  }
+}
+
+// Lae foto üles Firebase Storage'i ja salvesta Firestore'i
+async function uploadPunktFoto(input, punktId, punktNimi, jogi, popupId){
+  if(!input.files||!input.files[0])return;
+  if(!currentUser||!window.fb){alert('Logi sisse');return;}
+  if(!canCreateLoik()){alert('Fotode lisamine on Premium kasutajatele');return;}
+  const file=input.files[0];
+  if(file.size>5*1024*1024){alert('Fail on liiga suur (maks 5MB)');return;}
+  if(!file.type.startsWith('image/')){alert('Ainult pildifailid');return;}
+
+  // Näita laadimist
+  const el=document.getElementById('fotod-'+popupId);
+  if(el)el.innerHTML='<span style="font-size:11px;color:#888;">⏳ Laen üles...</span>';
+
+  try{
+    const fb=window.fb;
+    const ext=file.name.split('.').pop().toLowerCase()||'jpg';
+    const fotoId=Date.now()+'_'+Math.random().toString(36).slice(2,7);
+    const storagePath=`punktfotod/${punktId}/${fotoId}.${ext}`;
+    // Lae üles Storage'i
+    const sRef=fb.storageRef(fb.storage, storagePath);
+    await fb.uploadBytes(sRef, file);
+    const url=await fb.getDownloadURL(sRef);
+    // Salvesta Firestore'i
+    await fb.setDoc(
+      fb.doc(fb.db,'punktFotod',punktId,'fotod',fotoId),
+      {
+        url, storagePath,
+        uploaderUid: currentUser.uid,
+        uploaderName: currentUser.displayName||currentUser.email||'Kasutaja',
+        punktNimi, jogi, punktId,
+        ts: fb.serverTimestamp()
+      }
+    );
+    // Uuenda popup
+    await loadPunktFotod(punktId, popupId);
+  }catch(err){
+    console.error('Foto üleslaadimine ebaõnnestus:', err);
+    alert('Üleslaadimine ebaõnnestus: '+(err.message||'tundmatu viga'));
+    if(el)el.innerHTML='<span style="font-size:11px;color:#c00;">⚠️ Viga</span>';
+  }
+  input.value=''; // lähtesta input
+}
+
+// Kustuta foto
+async function deletePunktFoto(punktId, fotoId, storagePath, popupId){
+  if(!confirm('Kustuta see foto?'))return;
+  if(!window.fb)return;
+  try{
+    const fb=window.fb;
+    // Kustuta Storage'ist
+    if(storagePath){
+      try{await fb.deleteObject(fb.storageRef(fb.storage, storagePath));}
+      catch(e){console.warn('Storage kustutamine ebaõnnestus:', e);}
+    }
+    // Kustuta Firestore'ist
+    await fb.deleteDoc(fb.doc(fb.db,'punktFotod',punktId,'fotod',fotoId));
+    await loadPunktFotod(punktId, popupId);
+  }catch(err){
+    alert('Kustutamine ebaõnnestus: '+err.message);
+  }
+}
+
+// Ava foto täisekraanil
+function openFotoFullscreen(url){
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;cursor:pointer;';
+  overlay.onclick=()=>overlay.remove();
+  overlay.innerHTML=`<img src="${escapeHtml(url)}" style="max-width:95vw;max-height:95vh;object-fit:contain;border-radius:6px;" alt="foto"/>
+    <div style="position:absolute;top:16px;right:20px;color:#fff;font-size:24px;cursor:pointer;">✕</div>`;
+  document.body.appendChild(overlay);
 }
 
 // =============== AUTH (GOOGLE LOGIN) ===============

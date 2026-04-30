@@ -444,6 +444,53 @@
   </div>
 </div>
 
+<!-- MATKA LOOMINE -->
+<div class="overlay" id="cmnewmodal">
+  <div class="modal vmodal">
+    <div class="modal-title">⛵ Loo uus matk</div>
+    <p style="font-size:11px;color:var(--text3);margin-bottom:12px;">Pärast loomist saad jagada matka lingi klientidega. Nad logivad sisse Google'iga ja annavad nõusoleku.</p>
+    <div class="mrow"><label>Matka nimi *</label><input id="cm-nimi" type="text" placeholder="nt Võhandu kevadmatk"/></div>
+    <div class="mgrid">
+      <div class="mrow"><label>Jõgi *</label><input id="cm-jogi" type="text" placeholder="nt Võhandu"/></div>
+      <div class="mrow"><label>Lõik (valikuline)</label><input id="cm-loik" type="text" placeholder="nt Kirumpää – Vagula"/></div>
+    </div>
+    <div class="mgrid">
+      <div class="mrow"><label>Algus aeg (kuupäev + kell)</label><input id="cm-aeg" type="datetime-local"/></div>
+      <div class="mrow"><label>Max osalejaid</label><input id="cm-max" type="number" placeholder="10" min="1" max="100"/></div>
+    </div>
+    <div class="mrow"><label>Hinna info / kirjeldus (valikuline)</label><input id="cm-hind" type="text" placeholder="nt 25€/inimene, sisaldab paadiprenti"/></div>
+    <div class="mrow">
+      <label>Lepingu mall</label>
+      <select id="cm-leping-mall" onchange="lisaLepinguMall()" style="width:100%;font-family:'DM Sans',sans-serif;font-size:12px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);margin-bottom:6px;">
+        <option value="">— Vali mall —</option>
+      </select>
+    </div>
+    <div class="mrow">
+      <label>Lepingu tekst (omavastutus, enesedeklaratsioon) *</label>
+      <textarea id="cm-leping" rows="8" placeholder="Lepingu tekst..." style="width:100%;font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;line-height:1.5;"></textarea>
+    </div>
+    <div class="mrow"><label>Märkused (valikuline)</label><textarea id="cm-markused" rows="2" placeholder="Mida peaks teadma? Kohtumiskoht, varustus..." style="width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;"></textarea></div>
+    <div class="mact">
+      <button class="btn" onclick="closeCreateMatk()">Tühista</button>
+      <button class="btn btn-primary" onclick="submitCreateMatk()">⛵ Loo matk</button>
+    </div>
+  </div>
+</div>
+
+<!-- MU MATKAD -->
+<div class="overlay" id="mmmodal">
+  <div class="modal vmodal">
+    <div class="modal-title">⛵ Mu matkad</div>
+    <div id="mm-list" style="margin-top:8px;">
+      <div style="padding:30px;text-align:center;color:var(--text3);">⏳ Laen matku...</div>
+    </div>
+    <div class="mact">
+      <button class="btn" onclick="closeMyMatkad()">Sulge</button>
+      <button class="btn btn-primary" onclick="closeMyMatkad();openCreateMatk();">⛵ Loo uus matk</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="clmodal">
   <div class="modal vmodal">
     <div class="modal-title">⭐ Loo oma jõe lõik</div>
@@ -2439,9 +2486,9 @@ function updatePremiumUI(){
   // Loo matk - ainult Premium+, Guide+, Admin
   const newTripBtn=document.getElementById('newtrip-btn');
   if(newTripBtn)newTripBtn.style.display=canCreateLoik()?'inline-block':'none';
-  // Mu matkad - ainult matkajuhile/admin-ile
+  // Mu matkad - Premium+ (saab matku luua)
   const matkadBtn=document.getElementById('matkad-btn');
-  if(matkadBtn)matkadBtn.style.display=isGuide()?'inline-block':'none';
+  if(matkadBtn)matkadBtn.style.display=canCreateLoik()?'inline-block':'none';
   // Lae kasutaja oma lõigud (kui premium+)
   if(canCreateLoik()){
     loadUserLoigud();
@@ -2749,7 +2796,7 @@ function generateMatkaCode(){
 
 // Lae kasutaja matkad
 async function loadMyMatkad(){
-  if(!currentUser||!window.fb||!isGuide()){myMatkad=[];return;}
+  if(!currentUser||!window.fb||!canCreateLoik()){myMatkad=[];return;}
   try{
     const fb=window.fb;
     const q=fb.query(
@@ -2807,14 +2854,15 @@ async function loadMyLepinguMallid(){
 // Salvesta uus matk
 async function saveMatk(data){
   if(!currentUser||!window.fb)return null;
-  if(!isGuide()){alert('See on matkajuhi funktsioon');return null;}
+  if(!canCreateLoik()){alert('See on premium funktsioon. Vajad Premium, Matkajuhi või Admini staatust.');return null;}
   try{
     const fb=window.fb;
-    const matkaCode=generateMatkaCode();
+    const joinCode=generateMatkaCode();
     const matkaData={
       guideUid: currentUser.uid,
       guideName: currentUser.displayName||currentUser.email||'Matkajuht',
       guideEmail: currentUser.email||'',
+      title: data.nimi||'',  // Firestore reegel ootab 'title'
       nimi: data.nimi||'',
       jogi: data.jogi||'',
       loik: data.loik||'',
@@ -2823,13 +2871,14 @@ async function saveMatk(data){
       hind: data.hind||'',
       lepinguTekst: data.lepinguTekst||'',
       markused: data.markused||'',
-      matkaCode: matkaCode,
-      status: 'aktiivne', // 'aktiivne', 'kestab', 'lopetatud', 'tuhistatud'
+      joinCode: joinCode,  // Firestore reegel ootab 'joinCode'
+      matkaCode: joinCode,  // ka vana välja toetus, et UI töötaks
+      status: 'aktiivne',
       createdAt: fb.serverTimestamp()
     };
     const ref=await fb.addDoc(fb.collection(fb.db, 'matkad'), matkaData);
     await loadMyMatkad();
-    return {id: ref.id, matkaCode};
+    return {id: ref.id, matkaCode: joinCode};
   }catch(err){
     console.error('Matka salvestamine ebaõnnestus:', err);
     alert('Salvestamine ebaõnnestus: '+(err.message||err.code));
@@ -2873,8 +2922,8 @@ async function deleteMatk(matkaId){
 
 // Ava "Mu matkad" modal
 async function openMyMatkad(){
-  if(!isGuide()){
-    alert('See on matkajuhi funktsioon. Vajad Matkajuhi või Admini staatust.');
+  if(!canCreateLoik()){
+    alert('See on premium funktsioon. Vajad Premium, Matkajuhi või Admini staatust.');
     return;
   }
   document.getElementById('mmmodal').classList.add('open');
@@ -2952,7 +3001,7 @@ function shareMatkaLink(nimi, url){
 
 // Ava "Loo uus matk" vorm
 async function openCreateMatk(){
-  if(!isGuide()){alert('See on matkajuhi funktsioon');return;}
+  if(!canCreateLoik()){alert('See on premium funktsioon. Vajad Premium, Matkajuhi või Admini staatust.');return;}
   // Tühjenda väljad
   document.getElementById('cm-nimi').value='';
   document.getElementById('cm-jogi').value='';

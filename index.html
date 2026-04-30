@@ -708,6 +708,32 @@
 
 <!-- ADMIN PANEEL -->
 <div class="overlay" id="adminmodal">
+
+<!-- KÜSITLUSE VASTAMINE -->
+<div class="overlay" id="kusitlusvastamodal">
+  <div class="modal vmodal">
+    <div class="modal-title">📋 Tagasiside küsitlus</div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:12px;">Sinu vastused saadetakse matkajuhile. Tänan, et võtad aega! 🙏</p>
+    <div id="kusitlus-vasta-content"></div>
+    <div class="mact">
+      <button class="btn" onclick="closeKusitlusVastamine()">Tühista</button>
+      <button class="btn btn-primary" onclick="submitKusitlusVastused()">📤 Saada vastused</button>
+    </div>
+  </div>
+</div>
+
+<!-- VASTUSTE KOKKUVÕTE (MATKAJUHILE) -->
+<div class="overlay" id="vastustemodal">
+  <div class="modal vmodal">
+    <div class="modal-title">📊 Tagasiside vastused</div>
+    <div id="vastused-content" style="margin-top:8px;">
+      <div style="text-align:center;padding:20px;color:var(--text3);">⏳ Laen...</div>
+    </div>
+    <div class="mact">
+      <button class="btn btn-primary" onclick="closeVastusedKokkuvote()">Sulge</button>
+    </div>
+  </div>
+</div>
   <div class="modal vmodal">
     <div class="modal-title">🛠️ Admin paneel</div>
     <div id="admin-content" style="margin-top:8px;">
@@ -3048,6 +3074,243 @@ function hideTripBar(){
   if(window._tripBarInterval)clearInterval(window._tripBarInterval);
 }
 
+// =============== KÜSITLUSE VASTAMINE ===============
+
+let activeKusitlusMatkaId=null;
+
+async function openKusitlusVastamine(matkaId){
+  if(!currentUser){alert('Logi sisse, et vastata');return;}
+  activeKusitlusMatkaId=matkaId;
+  const el=document.getElementById('kusitlus-vasta-content');
+  el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">⏳ Laen...</div>';
+  document.getElementById('kusitlusvastamodal').classList.add('open');
+  try{
+    const fb=window.fb;
+    // Lae matka andmed (küsimused)
+    const snap=await fb.getDoc(fb.doc(fb.db,'matkad',matkaId));
+    if(!snap.exists()){el.innerHTML='<div style="color:var(--red);">Matka ei leitud</div>';return;}
+    const m=snap.data();
+    const kusitlus=normalizeKusitlus(m.kusitlus||[]);
+    if(kusitlus.length===0){el.innerHTML='<div style="color:var(--text3);">Sellel matkajuhil pole küsimusi lisatud.</div>';return;}
+    // Kontrolli kas juba on vastanud
+    const vastnud=await fb.getDoc(fb.doc(fb.db,'matkad',matkaId,'vastused',currentUser.uid));
+    if(vastnud.exists()){
+      el.innerHTML=`<div style="text-align:center;padding:20px;">
+        <div style="font-size:32px;margin-bottom:8px;">✅</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text);">Oled juba vastanud!</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:4px;">Täname tagasiside eest.</div>
+      </div>`;
+      return;
+    }
+    // Renderda küsimused
+    renderKusitlusForm(kusitlus, m.nimi||'');
+  }catch(err){
+    el.innerHTML='<div style="color:var(--red);">⚠️ Viga: '+escapeHtml(err.message)+'</div>';
+  }
+}
+
+function renderKusitlusForm(kusitlus, matkaNimi){
+  const el=document.getElementById('kusitlus-vasta-content');
+  if(!el)return;
+  let html=`<div style="font-size:12px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 12px;margin-bottom:14px;">⛵ ${escapeHtml(matkaNimi)}</div>`;
+  kusitlus.forEach((q,i)=>{
+    const qId='kv-'+i;
+    html+=`<div style="margin-bottom:16px;">
+      <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:8px;">${i+1}. ${escapeHtml(q.tekst)}</div>`;
+    if(q.tyyp==='valik'&&q.valikud?.length){
+      q.valikud.forEach((v,vi)=>{
+        html+=`<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:4px;background:var(--surface);border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:13px;color:var(--text);">
+          <input type="radio" name="${qId}" value="${escapeHtml(v)}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0;"/>
+          ${escapeHtml(v)}
+        </label>`;
+      });
+    } else if(q.tyyp==='hinne'){
+      html+=`<div style="display:flex;gap:8px;justify-content:center;padding:6px 0;" id="${qId}-stars">`;
+      for(let s=1;s<=5;s++){
+        html+=`<button type="button" onclick="setHinne('${qId}',${s})" data-val="${s}"
+          style="font-size:28px;background:transparent;border:none;cursor:pointer;opacity:0.35;transition:opacity .1s,transform .1s;"
+          id="${qId}-star-${s}">⭐</button>`;
+      }
+      html+=`</div><input type="hidden" id="${qId}-val" value=""/>
+      <div style="text-align:center;font-size:11px;color:var(--text3);margin-top:2px;" id="${qId}-label"></div>`;
+    } else {
+      html+=`<textarea id="${qId}-tekst" rows="3" placeholder="Kirjuta oma vastus..."
+        style="width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;"></textarea>`;
+    }
+    html+='</div>';
+  });
+  el.innerHTML=html;
+}
+
+function setHinne(qId, val){
+  document.getElementById(qId+'-val').value=val;
+  const labels=['','Väga halb','Halb','Rahuldav','Hea','Suurepärane!'];
+  document.getElementById(qId+'-label').textContent=labels[val]||'';
+  for(let s=1;s<=5;s++){
+    const star=document.getElementById(qId+'-star-'+s);
+    if(star){star.style.opacity=s<=val?'1':'0.3'; star.style.transform=s<=val?'scale(1.15)':'scale(1)';}
+  }
+}
+
+function closeKusitlusVastamine(){
+  document.getElementById('kusitlusvastamodal').classList.remove('open');
+  activeKusitlusMatkaId=null;
+}
+
+async function submitKusitlusVastused(){
+  if(!currentUser||!window.fb||!activeKusitlusMatkaId)return;
+  const fb=window.fb;
+  // Lae küsimused uuesti
+  const snap=await fb.getDoc(fb.doc(fb.db,'matkad',activeKusitlusMatkaId));
+  if(!snap.exists())return;
+  const kusitlus=normalizeKusitlus(snap.data().kusitlus||[]);
+  // Kogu vastused
+  const vastused=[];
+  let puudub=false;
+  kusitlus.forEach((q,i)=>{
+    const qId='kv-'+i;
+    let vastus='';
+    if(q.tyyp==='valik'){
+      const sel=document.querySelector(`input[name="${qId}"]:checked`);
+      vastus=sel?sel.value:'';
+    } else if(q.tyyp==='hinne'){
+      vastus=document.getElementById(qId+'-val')?.value||'';
+    } else {
+      vastus=document.getElementById(qId+'-tekst')?.value?.trim()||'';
+    }
+    if(!vastus)puudub=true;
+    vastused.push({kysimus:q.tekst, tyyp:q.tyyp, vastus});
+  });
+  if(puudub&&!confirm('Mõned küsimused on vastamata. Saata siiski?'))return;
+  try{
+    await fb.setDoc(
+      fb.doc(fb.db,'matkad',activeKusitlusMatkaId,'vastused',currentUser.uid),
+      {
+        uid: currentUser.uid,
+        nimi: currentUser.displayName||currentUser.email||'Kasutaja',
+        photoURL: currentUser.photoURL||null,
+        vastused,
+        ts: fb.serverTimestamp()
+      }
+    );
+    closeKusitlusVastamine();
+    alert('✅ Vastused saadetud! Täname tagasiside eest.');
+  }catch(err){
+    alert('Saatmine ebaõnnestus: '+err.message);
+  }
+}
+
+// =============== VASTUSTE KOKKUVÕTE (MATKAJUHILE) ===============
+
+async function openVastusedKokkuvote(matkaId){
+  document.getElementById('vastustemodal').classList.add('open');
+  document.getElementById('vastused-content').innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">⏳ Laen...</div>';
+  try{
+    const fb=window.fb;
+    // Lae matka andmed
+    const matkaSnap=await fb.getDoc(fb.doc(fb.db,'matkad',matkaId));
+    if(!matkaSnap.exists()){return;}
+    const matka=matkaSnap.data();
+    const kusitlus=normalizeKusitlus(matka.kusitlus||[]);
+    // Lae vastused
+    const vastusteSnap=await new Promise((res,rej)=>{
+      const u=fb.onSnapshot(fb.collection(fb.db,'matkad',matkaId,'vastused'),s=>{u();res(s);},rej);
+    });
+    const vastused=[];
+    vastusteSnap.forEach(d=>vastused.push({id:d.id,...d.data()}));
+    if(vastused.length===0){
+      document.getElementById('vastused-content').innerHTML=`
+        <div style="text-align:center;padding:30px;color:var(--text3);">
+          <div style="font-size:32px;margin-bottom:8px;">📭</div>
+          <div>Veel pole vastuseid saabunud.</div>
+          <div style="font-size:11px;margin-top:6px;">Saad küsitluse lingi klientidele jagada.</div>
+        </div>`;
+      return;
+    }
+    // Arvuta kokkuvõtted iga küsimuse kohta
+    let html=`<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">👥 ${vastused.length} vastust · ${escapeHtml(matka.nimi||'')}</div>`;
+    kusitlus.forEach((q,qi)=>{
+      html+=`<div style="margin-bottom:16px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:9px;">
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;">${qi+1}. ${escapeHtml(q.tekst)}</div>`;
+      // Kogu vastused sellele küsimusele
+      const qVastused=vastused.map(v=>(v.vastused||[])[qi]?.vastus).filter(Boolean);
+      if(q.tyyp==='hinne'){
+        // Arvuta keskmine hinne
+        const nums=qVastused.map(Number).filter(n=>n>=1&&n<=5);
+        const avg=nums.length?nums.reduce((a,b)=>a+b,0)/nums.length:0;
+        const stars='⭐'.repeat(Math.round(avg));
+        html+=`<div style="text-align:center;">
+          <div style="font-size:28px;margin-bottom:4px;">${stars||'—'}</div>
+          <div style="font-size:20px;font-weight:700;color:var(--accent);">${avg?avg.toFixed(1):'-'}<span style="font-size:13px;color:var(--text3);">/5</span></div>
+          <div style="font-size:11px;color:var(--text3);">${nums.length} vastust</div>
+        </div>`;
+        // Histogramm
+        if(nums.length){
+          html+='<div style="margin-top:10px;">';
+          for(let s=5;s>=1;s--){
+            const cnt=nums.filter(n=>n===s).length;
+            const pct=Math.round(cnt/nums.length*100);
+            html+=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+              <span style="font-size:11px;color:var(--text3);width:14px;">${s}</span>
+              <div style="flex:1;background:var(--surface2);border-radius:3px;height:8px;overflow:hidden;">
+                <div style="background:var(--accent);width:${pct}%;height:100%;border-radius:3px;transition:width .3s;"></div>
+              </div>
+              <span style="font-size:11px;color:var(--text3);width:28px;">${cnt}</span>
+            </div>`;
+          }
+          html+='</div>';
+        }
+      } else if(q.tyyp==='valik'){
+        // Loenda valikuid
+        const counts={};
+        qVastused.forEach(v=>{counts[v]=(counts[v]||0)+1;});
+        const total=qVastused.length||1;
+        (q.valikud||[]).forEach(v=>{
+          const cnt=counts[v]||0;
+          const pct=Math.round(cnt/total*100);
+          html+=`<div style="margin-bottom:5px;">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text);margin-bottom:2px;">
+              <span>${escapeHtml(v)}</span>
+              <span style="color:var(--text3);">${cnt} (${pct}%)</span>
+            </div>
+            <div style="background:var(--surface2);border-radius:3px;height:7px;overflow:hidden;">
+              <div style="background:var(--accent);width:${pct}%;height:100%;border-radius:3px;"></div>
+            </div>
+          </div>`;
+        });
+      } else {
+        // Vabatekst — näita kõik vastused
+        if(qVastused.length===0){
+          html+='<div style="font-size:12px;color:var(--text3);">Pole vastuseid</div>';
+        } else {
+          qVastused.forEach((v,vi)=>{
+            const resp=vastused[vi];
+            html+=`<div style="padding:8px 10px;background:var(--bg);border-radius:6px;margin-bottom:4px;">
+              <div style="font-size:12px;color:var(--text);line-height:1.4;">${escapeHtml(v)}</div>
+              <div style="font-size:10px;color:var(--text3);margin-top:3px;">${escapeHtml(resp?.nimi||'')}</div>
+            </div>`;
+          });
+        }
+      }
+      html+='</div>';
+    });
+    // Vastajate nimekiri
+    html+=`<div style="margin-top:8px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;">
+      <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Vastajad</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${vastused.map(v=>`<span style="font-size:11px;padding:2px 8px;background:var(--surface2);border-radius:4px;color:var(--text2);">${escapeHtml(v.nimi||'?')}</span>`).join('')}
+      </div>
+    </div>`;
+    document.getElementById('vastused-content').innerHTML=html;
+  }catch(err){
+    document.getElementById('vastused-content').innerHTML='<div style="text-align:center;padding:20px;color:var(--red);">⚠️ Viga: '+escapeHtml(err.message)+'</div>';
+  }
+}
+
+function closeVastusedKokkuvote(){
+  document.getElementById('vastustemodal').classList.remove('open');
+}
+
 // =============== ADMIN PANEEL ===============
 
 async function openAdminPanel(){
@@ -4123,6 +4386,7 @@ function renderMyMatkad(){
       </div>
       <div class="mm-card-actions">
         <button class="ibtn" onclick="openTrackingMap('${m.id}', '${escapeHtml(m.nimi||'').replace(/'/g,"\\'")}')">🗺️ Jälgi kaardil</button>
+        ${m.kusitlus&&m.kusitlus.length>0?`<button class="ibtn" onclick="openVastusedKokkuvote('${m.id}')">📊 Vastused</button>`:''}
         ${!isPast?`<button class="ibtn" onclick="lopetaMatk('${m.id}')" style="color:var(--orange);border-color:rgba(154,78,0,0.3);">🏁 Lõpeta matk</button>`:''}
         <button class="ibtn" onclick="deleteMatk('${m.id}')" style="color:var(--red);border-color:rgba(220,38,38,0.3);">🗑 Kustuta</button>
       </div>
@@ -5916,6 +6180,14 @@ async function submitJoin(){
           </button>
           <div style="font-size:10px;color:var(--text3);margin-top:8px;text-align:center;">Saad igal hetkel välja lülitada</div>
         </div>
+        ${m.kusitlus&&m.kusitlus.length>0?`
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin:0 0 14px;text-align:left;">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">📋 Tagasiside küsitlus</div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Saad täita pärast matka — sinu tagasiside aitab matkajuhil paraneda.</div>
+          <button onclick="openKusitlusVastamine('${m.id}')" style="width:100%;padding:11px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">
+            📝 Täida küsitlus
+          </button>
+        </div>`:''}
         <div class="mact" style="justify-content:center;">
           <button class="btn btn-primary" onclick="closeJoinModal()">Sulge</button>
         </div>

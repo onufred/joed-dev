@@ -451,8 +451,20 @@
     <p style="font-size:11px;color:var(--text3);margin-bottom:12px;">Pärast loomist saad jagada matka lingi klientidega. Nad logivad sisse Google'iga ja annavad nõusoleku.</p>
     <div class="mrow"><label>Matka nimi *</label><input id="cm-nimi" type="text" placeholder="nt Võhandu kevadmatk"/></div>
     <div class="mgrid">
-      <div class="mrow"><label>Jõgi *</label><input id="cm-jogi" type="text" placeholder="nt Võhandu"/></div>
-      <div class="mrow"><label>Lõik (valikuline)</label><input id="cm-loik" type="text" placeholder="nt Kirumpää – Vagula"/></div>
+      <div class="mrow">
+        <label>Jõgi *</label>
+        <select id="cm-jogi-select" onchange="onMatkaJogiChange()" style="width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+          <option value="">— Vali jõgi —</option>
+        </select>
+        <input id="cm-jogi" type="text" placeholder="nt Võhandu" style="display:none;margin-top:6px;"/>
+      </div>
+      <div class="mrow">
+        <label>Lõik (valikuline)</label>
+        <select id="cm-loik-select" onchange="onMatkaLoikChange()" style="width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+          <option value="">— Vali lõik —</option>
+        </select>
+        <input id="cm-loik" type="text" placeholder="nt Kirumpää – Vagula" style="display:none;margin-top:6px;"/>
+      </div>
     </div>
     <div class="mgrid">
       <div class="mrow"><label>Algus aeg (kuupäev + kell)</label><input id="cm-aeg" type="datetime-local"/></div>
@@ -3011,10 +3023,111 @@ async function openCreateMatk(){
   document.getElementById('cm-hind').value='';
   document.getElementById('cm-leping').value=defaultLepinguTekst();
   document.getElementById('cm-markused').value='';
+  // Reset rippmenüüd
+  document.getElementById('cm-jogi-select').value='';
+  document.getElementById('cm-jogi').style.display='none';
+  document.getElementById('cm-loik-select').innerHTML='<option value="">— Vali lõik —</option>';
+  document.getElementById('cm-loik').style.display='none';
+  // Täida jõgede rippmenüü
+  fillMatkaJogedSelect();
   // Lae lepingu mallid
   await loadMyLepinguMallid();
   renderLepingumallid();
   document.getElementById('cmnewmodal').classList.add('open');
+}
+
+// Täida jõgede rippmenüü kasutaja jõgede järgi
+function fillMatkaJogedSelect(){
+  const sel=document.getElementById('cm-jogi-select');
+  if(!sel)return;
+  // Saame unikaalsed jõed kasutaja avakuvalt
+  const seenJoed=new Set();
+  const optionsHtml=['<option value="">— Vali jõgi —</option>'];
+  // Sorteeri tähestiku järgi
+  const sortedRivers=[...rivers].sort((a,b)=>(a.jogi||'').localeCompare(b.jogi||'', 'et'));
+  for(const r of sortedRivers){
+    const j=r.jogi||'';
+    if(!j||seenJoed.has(j))continue;
+    seenJoed.add(j);
+    const flag=r.country==='LV'?'🇱🇻 ':'🇪🇪 ';
+    optionsHtml.push(`<option value="${escapeHtml(j)}">${flag}${escapeHtml(j)}</option>`);
+  }
+  optionsHtml.push('<option value="__custom__">— Muu jõgi (kirjuta käsitsi) —</option>');
+  sel.innerHTML=optionsHtml.join('');
+}
+
+// Kui jõgi muudetakse, täidame lõikude rippmenüü
+function onMatkaJogiChange(){
+  const sel=document.getElementById('cm-jogi-select');
+  const customInput=document.getElementById('cm-jogi');
+  const loikSel=document.getElementById('cm-loik-select');
+  const loikCustom=document.getElementById('cm-loik');
+  if(!sel)return;
+  const value=sel.value;
+  if(value==='__custom__'){
+    // Kasutaja kirjutab oma
+    customInput.style.display='block';
+    customInput.focus();
+    customInput.value='';
+    // Lõik ka käsitsi
+    loikSel.innerHTML='<option value="__custom__">— Kirjuta käsitsi —</option>';
+    loikSel.value='__custom__';
+    loikCustom.style.display='block';
+    loikCustom.value='';
+    return;
+  }
+  // Standardne jõgi valitud
+  customInput.style.display='none';
+  customInput.value=value;
+  // Täida lõikude rippmenüü
+  fillMatkaLoiguSelect(value);
+}
+
+// Täida lõikude rippmenüü etteantud jõe põhjal
+function fillMatkaLoiguSelect(jogi){
+  const sel=document.getElementById('cm-loik-select');
+  const customInput=document.getElementById('cm-loik');
+  if(!sel)return;
+  const j=String(jogi||'').toLowerCase();
+  const optionsHtml=['<option value="">— Vali lõik (valikuline) —</option>'];
+  // Avalikud lõigud
+  const publicLoigud=loigud.filter(l=>String(l.jogi||'').toLowerCase()===j);
+  if(publicLoigud.length>0){
+    optionsHtml.push('<optgroup label="Avalikud lõigud">');
+    for(const l of publicLoigud){
+      optionsHtml.push(`<option value="${escapeHtml(l.nimi||l.id)}">${escapeHtml(l.nimi||l.id)}${l.pikkus?' ('+l.pikkus+' km)':''}</option>`);
+    }
+    optionsHtml.push('</optgroup>');
+  }
+  // Kasutaja oma lõigud
+  const myLoigud=userLoigud.filter(l=>String(l.jogi||'').toLowerCase()===j);
+  if(myLoigud.length>0){
+    optionsHtml.push('<optgroup label="⭐ Minu lõigud">');
+    for(const l of myLoigud){
+      optionsHtml.push(`<option value="${escapeHtml(l.nimi||'')}">⭐ ${escapeHtml(l.nimi||'')}${l.pikkus?' ('+l.pikkus+' km)':''}</option>`);
+    }
+    optionsHtml.push('</optgroup>');
+  }
+  optionsHtml.push('<option value="__custom__">— Muu lõik (kirjuta käsitsi) —</option>');
+  sel.innerHTML=optionsHtml.join('');
+  sel.value='';
+  customInput.style.display='none';
+  customInput.value='';
+}
+
+// Kui lõik muutub
+function onMatkaLoikChange(){
+  const sel=document.getElementById('cm-loik-select');
+  const customInput=document.getElementById('cm-loik');
+  if(!sel)return;
+  if(sel.value==='__custom__'){
+    customInput.style.display='block';
+    customInput.focus();
+    customInput.value='';
+  } else {
+    customInput.style.display='none';
+    customInput.value=sel.value;
+  }
 }
 
 function closeCreateMatk(){

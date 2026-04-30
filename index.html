@@ -336,6 +336,7 @@
     <button class="btn" id="reset-btn" onclick="resetDefaults()" title="Lähtesta vaikimisi nimekiri" style="display:none;">🔄 Lähtesta</button>
     <button class="btn" id="export-btn" onclick="exportSettings()" style="display:none;">📤 Ekspordi</button>
     <button class="btn" id="matkad-btn" onclick="openMyMatkad()" style="display:none;">⛵ Mu matkad</button>
+    <button class="btn" id="joined-btn" onclick="openMyJoined()" style="display:none;">🚣 Mu liitumised</button>
     <button class="btn btn-primary" id="add-btn" onclick="openM()" style="display:none;">+ Lisa jõgi</button>
     <button class="btn btn-primary" id="newtrip-btn" onclick="openCreateMatk()" style="display:none;background:linear-gradient(135deg,#1d4ed8,#1e3a8a);">⛵ Loo matk</button>
     <div id="auth-area">
@@ -511,6 +512,19 @@
     <div class="mact">
       <button class="btn" onclick="closeMyMatkad()">Sulge</button>
       <button class="btn btn-primary" onclick="closeMyMatkad();openCreateMatk();">⛵ Loo uus matk</button>
+    </div>
+  </div>
+</div>
+
+<!-- MU LIITUMISED (kliendi vaade) -->
+<div class="overlay" id="joinedmodal">
+  <div class="modal vmodal">
+    <div class="modal-title">🚣 Mu liitumised</div>
+    <div id="joined-list" style="margin-top:8px;">
+      <div style="padding:30px;text-align:center;color:var(--text3);">⏳ Laen...</div>
+    </div>
+    <div class="mact">
+      <button class="btn btn-primary" onclick="closeMyJoined()">Sulge</button>
     </div>
   </div>
 </div>
@@ -2532,9 +2546,12 @@ function updatePremiumUI(){
   // Loo matk - ainult Premium+, Guide+, Admin
   const newTripBtn=document.getElementById('newtrip-btn');
   if(newTripBtn)newTripBtn.style.display=canCreateLoik()?'inline-block':'none';
-  // Mu matkad - Premium+ (saab matku luua)
+  // Mu matkad - Premium+ (saab matku luua ja jälgida)
   const matkadBtn=document.getElementById('matkad-btn');
   if(matkadBtn)matkadBtn.style.display=canCreateLoik()?'inline-block':'none';
+  // Mu liitumised - kõigil sisselogitutel (FREE kasutaja näeb oma liitumisi)
+  const joinedBtn=document.getElementById('joined-btn');
+  if(joinedBtn)joinedBtn.style.display=currentUser?'inline-block':'none';
   // Lae kasutaja oma lõigud (kui premium+)
   if(canCreateLoik()){
     loadUserLoigud();
@@ -2833,6 +2850,35 @@ async function submitCreateLoik(){
 // =============== MATKAD (matkajuhi funktsioonid) ===============
 
 // Genereeri lühike unikaalne kood (8 tähekombinatsiooni)
+// Arvuta, kas matk on möödas
+// Loogika: status='lopetatud' OR (algusAeg + kestus < nüüd) OR (pole kestust → jää aktiivne kuni käsitsi lõpetatakse)
+function isMatkaPast(m){
+  // Käsitsi lõpetatud
+  if(m.status==='lopetatud'||m.status==='tuhistatud')return true;
+  if(!m.algusAeg)return false;
+  const algus=m.algusAeg instanceof Date?m.algusAeg:m.algusAeg.toDate?.();
+  if(!algus)return false;
+  const now=Date.now();
+  // Kui kestus on määratud, kasuta seda
+  if(m.kestus&&m.kestus>0){
+    const lopuMs=algus.getTime()+(m.kestus*60*60*1000); // kestus tundides
+    return lopuMs<now;
+  }
+  // Kui kuupäev on rohkem kui 3 päeva tagasi (ilma kestuseta = arvatavasti möödas)
+  return algus.getTime()+(3*24*60*60*1000)<now;
+}
+
+// Matka staatuse tekst kuvamiseks
+function matkaStatusText(m){
+  if(m.status==='lopetatud')return 'Lõpetatud';
+  if(m.status==='tuhistatud')return 'Tühistatud';
+  if(isMatkaPast(m))return 'Möödas';
+  const algus=m.algusAeg instanceof Date?m.algusAeg:m.algusAeg?.toDate?.();
+  if(!algus)return 'Aktiivne';
+  if(algus.getTime()>Date.now())return 'Tulemas';
+  return 'Toimub';
+}
+
 function generateMatkaCode(){
   const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Ilma segavaid (I,O,1,0)
   let s='';
@@ -2952,17 +2998,32 @@ async function saveLepinguMall(nimi, tekst){
 }
 
 // Kustuta matk
+// Kustuta matk
 async function deleteMatk(matkaId){
-  if(!currentUser||!window.fb)return;
-  if(!confirm('Kustuta see matk? Seda ei saa tagasi võtta.'))return;
+  if(!confirm('Kustuta matk? See kustutab ka kõik osalejate andmed.'))return;
+  if(!window.fb)return;
   try{
     const fb=window.fb;
     await fb.deleteDoc(fb.doc(fb.db, 'matkad', matkaId));
     await loadMyMatkad();
     renderMyMatkad();
   }catch(err){
-    console.error('Kustutamine ebaõnnestus:', err);
     alert('Kustutamine ebaõnnestus: '+(err.message||err.code));
+  }
+}
+async function lopetaMatk(matkaId){
+  if(!confirm('Lõpeta matk?\n\nSee märgib matka lõpetatuks ja GPS jagamine peatub kõigil osavõtjatel.'))return;
+  if(!window.fb)return;
+  try{
+    const fb=window.fb;
+    await fb.updateDoc(fb.doc(fb.db,'matkad',matkaId),{
+      status:'lopetatud',
+      lopetatudAt: fb.serverTimestamp()
+    });
+    await loadMyMatkad();
+    renderMyMatkad();
+  }catch(err){
+    alert('Lõpetamine ebaõnnestus: '+(err.message||err.code));
   }
 }
 
@@ -2993,7 +3054,9 @@ function renderMyMatkad(){
   let html='';
   for(const m of myMatkad){
     const dateStr=m.algusAeg?m.algusAeg.toLocaleDateString('et-EE',{day:'numeric',month:'long',year:'numeric'})+' '+m.algusAeg.toLocaleTimeString('et-EE',{hour:'2-digit',minute:'2-digit'}):'(kuupäev määramata)';
-    const isPast=m.algusAeg&&m.algusAeg.getTime()<Date.now();
+    const isPast=isMatkaPast(m);
+    const statusText=matkaStatusText(m);
+    const statusColor=isPast?'background:var(--surface2);color:var(--text3);':(statusText==='Toimub'?'background:rgba(45,90,61,0.15);color:var(--accent);':'background:rgba(59,130,246,0.1);color:#1d4ed8;');
     const linkUrl=window.location.origin+window.location.pathname+'?join='+m.matkaCode;
     html+=`<div class="mm-card ${isPast?'past':''}">
       <div class="mm-card-head">
@@ -3002,7 +3065,7 @@ function renderMyMatkad(){
           <div class="mm-card-meta">${escapeHtml(m.jogi||'')}${m.loik?' · '+escapeHtml(m.loik):''}</div>
           <div class="mm-card-meta">📅 ${dateStr}</div>
         </div>
-        <div class="mm-card-status ${isPast?'past':'active'}">${isPast?'Möödas':'Aktiivne'}</div>
+        <div class="mm-card-status" style="${statusColor}border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;">${statusText}</div>
       </div>
       <div class="mm-card-link">
         <span style="font-size:11px;color:var(--text3);">🔗 Jagatav link klientidele:</span>
@@ -3017,6 +3080,7 @@ function renderMyMatkad(){
       </div>
       <div class="mm-card-actions">
         <button class="ibtn" onclick="openTrackingMap('${m.id}', '${escapeHtml(m.nimi||'').replace(/'/g,"\\'")}')">🗺️ Jälgi kaardil</button>
+        ${!isPast?`<button class="ibtn" onclick="lopetaMatk('${m.id}')" style="color:var(--orange);border-color:rgba(154,78,0,0.3);">🏁 Lõpeta matk</button>`:''}
         <button class="ibtn" onclick="deleteMatk('${m.id}')" style="color:var(--red);border-color:rgba(220,38,38,0.3);">🗑 Kustuta</button>
       </div>
     </div>`;
@@ -3512,6 +3576,103 @@ document.addEventListener('keydown', (e)=>{
   }
 });
 
+// =============== MU LIITUMISED (kliendi vaade) ===============
+
+async function openMyJoined(){
+  if(!currentUser||!window.fb){alert('Logi kõigepealt sisse');return;}
+  document.getElementById('joinedmodal').classList.add('open');
+  document.getElementById('joined-list').innerHTML='<div style="padding:30px;text-align:center;color:var(--text3);">⏳ Laen liitumisi...</div>';
+  try{
+    const fb=window.fb;
+    // Otsi kõik matkad, kus see kasutaja on osaleja
+    // Firestore'i piirangust tulenevalt peame otsima osalejad collection group kaudu
+    const q=fb.query(
+      fb.collection(fb.db, 'matkad'),
+      fb.limit(50)
+    );
+    // Alternatiiv: otsi kasutaja liitumised osalejad subcollection-ist
+    // Kuna Firestore ei luba otse subcollection group otsida ilma indexita,
+    // salvestame liitumise ka eraldi kasutaja collection'i
+    const joinedSnap=await new Promise((resolve,reject)=>{
+      const unsub=fb.onSnapshot(
+        fb.query(
+          fb.collection(fb.db,'joinedTrips'),
+          fb.where('uid','==',currentUser.uid)
+        ),
+        s=>{unsub();resolve(s);},
+        reject
+      );
+    });
+    if(joinedSnap.empty){
+      document.getElementById('joined-list').innerHTML='<div style="padding:30px;text-align:center;color:var(--text3);font-size:13px;">Pole ühelegi matkale liitunud.<br>Vajuta matkajuhilt saadud linki, et liituda.</div>';
+      return;
+    }
+    // Lae iga matka detailid
+    const matkaIds=[];
+    const joinDates={};
+    joinedSnap.forEach(doc=>{
+      const d=doc.data();
+      if(d.matkaId){
+        matkaIds.push(d.matkaId);
+        joinDates[d.matkaId]=d.joinedAt?.toDate?.();
+      }
+    });
+    const matkaPromises=matkaIds.map(id=>
+      new Promise((resolve,reject)=>{
+        const unsub=fb.onSnapshot(fb.doc(fb.db,'matkad',id),s=>{unsub();resolve(s);},reject);
+      })
+    );
+    const matkaSnaps=await Promise.all(matkaPromises);
+    renderJoinedList(matkaSnaps, joinDates);
+  }catch(err){
+    console.warn('Liitumiste laadimine ebaõnnestus:', err);
+    document.getElementById('joined-list').innerHTML='<div style="padding:20px;text-align:center;color:var(--red);">⚠️ Laadimine ebaõnnestus</div>';
+  }
+}
+
+function closeMyJoined(){
+  document.getElementById('joinedmodal').classList.remove('open');
+}
+
+function renderJoinedList(matkaSnaps, joinDates){
+  const el=document.getElementById('joined-list');
+  if(!el)return;
+  const valid=matkaSnaps.filter(s=>s.exists());
+  if(valid.length===0){
+    el.innerHTML='<div style="padding:30px;text-align:center;color:var(--text3);font-size:13px;">Pole ühelegi matkale liitunud.</div>';
+    return;
+  }
+  let html='';
+  for(const snap of valid){
+    const m=snap.data();
+    const matkaId=snap.id;
+    const joinedAt=joinDates[matkaId];
+    const joinedStr=joinedAt?joinedAt.toLocaleDateString('et-EE',{day:'numeric',month:'long',year:'numeric'}):'—';
+    const algusAeg=m.algusAeg?.toDate?.();
+    const dateStr=algusAeg?algusAeg.toLocaleDateString('et-EE',{day:'numeric',month:'long',year:'numeric'})+' '+algusAeg.toLocaleTimeString('et-EE',{hour:'2-digit',minute:'2-digit'}):'(kuupäev määramata)';
+    const matkObj={...m, algusAeg:algusAeg};
+    const isPast=isMatkaPast(matkObj);
+    const statusText=matkaStatusText(matkObj);
+    const trackingActive=clientTrackingMatkaId===matkaId;
+    html+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+        <div>
+          <div style="font-size:15px;font-weight:600;color:var(--text);">${escapeHtml(m.nimi||m.title||'—')}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px;">${escapeHtml(m.jogi||'')}${m.loik?' · '+escapeHtml(m.loik):''}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">📅 ${dateStr}</div>
+          <div style="font-size:11px;color:var(--text3);">Matkajuht: ${escapeHtml(m.guideName||'—')}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:4px;font-family:'DM Mono',monospace;">Liitusin: ${joinedStr}</div>
+        </div>
+        <div style="font-size:11px;padding:3px 8px;border-radius:5px;font-weight:600;flex-shrink:0;${isPast?'background:var(--surface2);color:var(--text3);':'background:rgba(45,90,61,0.1);color:var(--accent);'}">${statusText}</div>
+      </div>
+      ${!isPast?`<button onclick="closeMyJoined();toggleClientTracking('${matkaId}','${escapeHtml(m.nimi||m.title||'').replace(/'/g,"\\'")}'); " style="width:100%;padding:12px;background:${trackingActive?'#dc2626':'var(--accent)'};color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">
+        ${trackingActive?'🔴 Peata asukoha jagamine':'📍 Jaga oma asukohta matkajuhiga'}
+      </button>`:`<div style="font-size:12px;color:var(--text3);text-align:center;padding:8px;">See matk on möödas</div>`}
+    </div>`;
+  }
+  el.innerHTML=html;
+}
+
 // =============== MATKAJUHI TRACKING MAP ===============
 
 let trackMap=null;
@@ -3875,7 +4036,7 @@ async function submitJoin(){
   if(btn){btn.disabled=true;btn.textContent='⏳ Liitun...';}
   try{
     const fb=window.fb;
-    // Salvesta osaleja
+    // Salvesta osaleja matka alla
     await fb.setDoc(
       fb.doc(fb.db, 'matkad', m.id, 'osalejad', currentUser.uid),
       {
@@ -3885,11 +4046,20 @@ async function submitJoin(){
         photoURL: currentUser.photoURL||null,
         consent: true,
         consentAt: fb.serverTimestamp(),
-        consentIp: null, // IP serveripoolselt ei ole võimalik brauseris
         matkaId: m.id,
         matkaNimi: m.nimi||m.title||'',
         joinedAt: fb.serverTimestamp(),
         trackingActive: false
+      }
+    );
+    // Salvesta ka kasutaja enda liitumiste alla (kiireks otsimiseks)
+    await fb.setDoc(
+      fb.doc(fb.db, 'joinedTrips', currentUser.uid+'_'+m.id),
+      {
+        uid: currentUser.uid,
+        matkaId: m.id,
+        matkaNimi: m.nimi||m.title||'',
+        joinedAt: fb.serverTimestamp()
       }
     );
     // Näita edu-teadet + GPS jagamise nupp

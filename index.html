@@ -554,18 +554,34 @@
     <div class="mrow">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <label style="margin:0;">🎒 Varustuse nimekiri (valikuline)</label>
-        <button onclick="lisaVarustuseRida()" style="font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">+ Lisa rida</button>
+        <div style="display:flex;gap:5px;">
+          <button onclick="openVarustusMallid()" style="font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">⚙️ Mallid</button>
+          <button onclick="lisaVarustuseRida()" style="font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">+ Lisa rida</button>
+        </div>
       </div>
       <div id="cm-varustus-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:4px;"></div>
-      <p style="font-size:11px;color:var(--text3);margin:0;">Kliendid näevad seda nimekirja matka lehel liitumisel.</p>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
+        <select id="cm-varustus-mall" onchange="applyVarustusMall()" style="flex:1;font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+          <option value="">— Vali mall —</option>
+        </select>
+        <button onclick="saveVarustusMall()" style="font-size:11px;padding:5px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;">💾 Salvesta mallina</button>
+      </div>
     </div>
     <div class="mrow">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <label style="margin:0;">📋 Tagasiside küsitlus (valikuline)</label>
-        <button onclick="lisaKusitlusKusimus()" style="font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">+ Lisa küsimus</button>
+        <div style="display:flex;gap:5px;">
+          <button onclick="openKusitlusMallid()" style="font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">⚙️ Mallid</button>
+          <button onclick="lisaKusitlusKusimus()" style="font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">+ Lisa küsimus</button>
+        </div>
       </div>
       <div id="cm-kusitlus-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:4px;"></div>
-      <p style="font-size:11px;color:var(--text3);margin:0;">Kliendid saavad pärast matka vastata. Vastused tulevad sinu matka lehele.</p>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
+        <select id="cm-kusitlus-mall" onchange="applyKusitlusMall()" style="flex:1;font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+          <option value="">— Vali mall —</option>
+        </select>
+        <button onclick="saveKusitlusMall()" style="font-size:11px;padding:5px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;">💾 Salvesta mallina</button>
+      </div>
     </div>
     <div class="mact">
       <button class="btn" onclick="closeCreateMatk()">Tühista</button>
@@ -643,6 +659,42 @@
 
 <!-- ISIKLIK STATISTIKA -->
 <div class="overlay" id="statsmodal">
+
+<!-- VARUSTUSE MALLID -->
+<div class="overlay" id="varustusmallidmodal">
+  <div class="modal vmodal">
+    <div class="modal-title">🎒 Varustuse nimekirja mallid</div>
+    <div id="vm-list" style="margin-bottom:12px;"></div>
+    <div style="border-top:1px solid var(--border);padding-top:12px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px;">➕ Uus mall</div>
+      <input id="vm-uus-nimi" type="text" placeholder="Malli nimi (nt 'Standardvarustus')" style="width:100%;margin-bottom:6px;"/>
+      <div id="vm-uus-read" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px;"></div>
+      <button onclick="lisaVmRida()" style="font-size:11px;padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;margin-bottom:8px;">+ Lisa rida</button>
+      <button class="btn btn-primary" onclick="submitUusVarustusMall()" style="width:100%;">💾 Salvesta mall</button>
+    </div>
+    <div class="mact" style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="closeVarustusMallid()">Sulge</button>
+    </div>
+  </div>
+</div>
+
+<!-- KÜSITLUSE MALLID -->
+<div class="overlay" id="kusitlusmallidmodal">
+  <div class="modal vmodal">
+    <div class="modal-title">📋 Tagasiside küsitluse mallid</div>
+    <div id="km-list" style="margin-bottom:12px;"></div>
+    <div style="border-top:1px solid var(--border);padding-top:12px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px;">➕ Uus mall</div>
+      <input id="km-uus-nimi" type="text" placeholder="Malli nimi (nt 'Standard tagasiside')" style="width:100%;margin-bottom:6px;"/>
+      <div id="km-uus-read" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px;"></div>
+      <button onclick="lisaKmRida()" style="font-size:11px;padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;margin-bottom:8px;">+ Lisa küsimus</button>
+      <button class="btn btn-primary" onclick="submitUusKusitlusMall()" style="width:100%;">💾 Salvesta mall</button>
+    </div>
+    <div class="mact" style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="closeKusitlusMallid()">Sulge</button>
+    </div>
+  </div>
+</div>
   <div class="modal vmodal">
     <div class="modal-title">📊 Minu statistika</div>
     <div id="stats-content" style="margin-top:8px;">
@@ -4171,6 +4223,10 @@ async function openCreateMatk(){
   // Lae lepingu mallid
   await loadMyLepinguMallid();
   renderLepingumallid();
+  // Lae varustuse ja küsitluse mallid
+  document.getElementById('cm-varustus-list').innerHTML='';
+  document.getElementById('cm-kusitlus-list').innerHTML='';
+  await Promise.all([loadVarustusMallid(), loadKusitlusMallid()]);
   document.getElementById('cmnewmodal').classList.add('open');
 }
 
@@ -4478,6 +4534,245 @@ function lisaKusitlusKusimus(val=''){
   div.innerHTML=`<input class="cm-kusimus-item" type="text" value="${escapeHtml(val)}" placeholder="nt Kuidas meeldis? Mis läks hästi?" style="flex:1;font-size:12px;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;"/>
     <button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:14px;padding:4px;">✕</button>`;
   list.appendChild(div);
+}
+
+// =============== VARUSTUSE MALLID ===============
+
+let myVarustusMallid=[];
+let myKusitlusMallid=[];
+
+async function loadVarustusMallid(){
+  if(!currentUser||!window.fb||!canCreateLoik()){myVarustusMallid=[];return;}
+  try{
+    const fb=window.fb;
+    const snap=await new Promise((res,rej)=>{
+      const u=fb.onSnapshot(fb.query(fb.collection(fb.db,'varustusmallid'),fb.where('uid','==',currentUser.uid)),s=>{u();res(s);},rej);
+    });
+    myVarustusMallid=[];
+    snap.forEach(d=>myVarustusMallid.push({id:d.id,...d.data()}));
+    renderVarustusMallSelect();
+  }catch(e){myVarustusMallid=[];}
+}
+
+async function loadKusitlusMallid(){
+  if(!currentUser||!window.fb||!canCreateLoik()){myKusitlusMallid=[];return;}
+  try{
+    const fb=window.fb;
+    const snap=await new Promise((res,rej)=>{
+      const u=fb.onSnapshot(fb.query(fb.collection(fb.db,'kusitlusmallid'),fb.where('uid','==',currentUser.uid)),s=>{u();res(s);},rej);
+    });
+    myKusitlusMallid=[];
+    snap.forEach(d=>myKusitlusMallid.push({id:d.id,...d.data()}));
+    renderKusitlusMallSelect();
+  }catch(e){myKusitlusMallid=[];}
+}
+
+function renderVarustusMallSelect(){
+  const sel=document.getElementById('cm-varustus-mall');
+  if(!sel)return;
+  let html='<option value="">— Vali mall —</option>';
+  myVarustusMallid.forEach(m=>html+=`<option value="${m.id}">${escapeHtml(m.nimi||'Mall')}</option>`);
+  sel.innerHTML=html;
+}
+
+function renderKusitlusMallSelect(){
+  const sel=document.getElementById('cm-kusitlus-mall');
+  if(!sel)return;
+  let html='<option value="">— Vali mall —</option>';
+  myKusitlusMallid.forEach(m=>html+=`<option value="${m.id}">${escapeHtml(m.nimi||'Mall')}</option>`);
+  sel.innerHTML=html;
+}
+
+function applyVarustusMall(){
+  const id=document.getElementById('cm-varustus-mall').value;
+  if(!id)return;
+  const m=myVarustusMallid.find(mm=>mm.id===id);
+  if(!m||!m.read)return;
+  document.getElementById('cm-varustus-list').innerHTML='';
+  m.read.forEach(r=>lisaVarustuseRida(r));
+}
+
+function applyKusitlusMall(){
+  const id=document.getElementById('cm-kusitlus-mall').value;
+  if(!id)return;
+  const m=myKusitlusMallid.find(mm=>mm.id===id);
+  if(!m||!m.read)return;
+  document.getElementById('cm-kusitlus-list').innerHTML='';
+  m.read.forEach(r=>lisaKusitlusKusimus(r));
+}
+
+async function saveVarustusMall(){
+  const read=[...document.querySelectorAll('.cm-varustus-item')].map(i=>i.value.trim()).filter(Boolean);
+  if(read.length===0){alert('Lisa kõigepealt vähemalt üks rida');return;}
+  const nimi=prompt('Anna mallile nimi (nt "Kayak päevmatk"):');
+  if(!nimi)return;
+  if(!window.fb)return;
+  const fb=window.fb;
+  await fb.addDoc(fb.collection(fb.db,'varustusmallid'),{uid:currentUser.uid,nimi,read,createdAt:fb.serverTimestamp()});
+  await loadVarustusMallid();
+  alert('✅ Mall salvestatud!');
+}
+
+async function saveKusitlusMall(){
+  const read=[...document.querySelectorAll('.cm-kusimus-item')].map(i=>i.value.trim()).filter(Boolean);
+  if(read.length===0){alert('Lisa kõigepealt vähemalt üks küsimus');return;}
+  const nimi=prompt('Anna mallile nimi (nt "Standard tagasiside"):');
+  if(!nimi)return;
+  if(!window.fb)return;
+  const fb=window.fb;
+  await fb.addDoc(fb.collection(fb.db,'kusitlusmallid'),{uid:currentUser.uid,nimi,read,createdAt:fb.serverTimestamp()});
+  await loadKusitlusMallid();
+  alert('✅ Mall salvestatud!');
+}
+
+// Mallide haldamine
+
+async function openVarustusMallid(){
+  document.getElementById('varustusmallidmodal').classList.add('open');
+  document.getElementById('vm-uus-nimi').value='';
+  document.getElementById('vm-uus-read').innerHTML='';
+  document.getElementById('vm-uus-nimi').dataset.editId='';
+  await loadVarustusMallid();
+  renderVarustusMallideList();
+}
+function closeVarustusMallid(){
+  document.getElementById('varustusmallidmodal').classList.remove('open');
+  renderVarustusMallSelect();
+}
+
+async function openKusitlusMallid(){
+  document.getElementById('kusitlusmallidmodal').classList.add('open');
+  document.getElementById('km-uus-nimi').value='';
+  document.getElementById('km-uus-read').innerHTML='';
+  document.getElementById('km-uus-nimi').dataset.editId='';
+  await loadKusitlusMallid();
+  renderKusitlusMallideList();
+}
+function closeKusitlusMallid(){
+  document.getElementById('kusitlusmallidmodal').classList.remove('open');
+  renderKusitlusMallSelect();
+}
+
+function _mallRidaInput(val, cls, placeholder){
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;gap:6px;align-items:center;';
+  div.innerHTML=`<input class="${cls}" type="text" value="${escapeHtml(val)}" placeholder="${placeholder}" style="flex:1;font-size:12px;padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;"/>
+    <button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:13px;padding:3px;">✕</button>`;
+  return div;
+}
+function lisaVmRida(val=''){
+  document.getElementById('vm-uus-read').appendChild(_mallRidaInput(val,'vm-rida-item','nt Päästevest, veekindel kott...'));
+}
+function lisaKmRida(val=''){
+  document.getElementById('km-uus-read').appendChild(_mallRidaInput(val,'km-rida-item','nt Kuidas meeldis matk?'));
+}
+
+function renderVarustusMallideList(){
+  const el=document.getElementById('vm-list');
+  if(!el)return;
+  if(myVarustusMallid.length===0){
+    el.innerHTML='<div style="text-align:center;padding:14px;color:var(--text3);font-size:13px;border:1px dashed var(--border);border-radius:8px;">Veel pole ühtegi malli.</div>';
+    return;
+  }
+  el.innerHTML='<div style="display:flex;flex-direction:column;gap:6px;">'+myVarustusMallid.map(m=>`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+        <div style="font-size:13px;font-weight:600;color:var(--text);">🎒 ${escapeHtml(m.nimi||'Mall')}</div>
+        <div style="display:flex;gap:5px;">
+          <button onclick="editVarustusMall('${m.id}')" style="font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">✏️</button>
+          <button onclick="deleteVarustusMall('${m.id}')" style="font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid rgba(220,38,38,0.3);background:var(--surface);color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif;">🗑</button>
+        </div>
+      </div>
+      <ul style="margin:0;padding-left:16px;font-size:11px;color:var(--text3);">${(m.read||[]).map(r=>`<li>${escapeHtml(r)}</li>`).join('')}</ul>
+    </div>`).join('')+'</div>';
+}
+
+function renderKusitlusMallideList(){
+  const el=document.getElementById('km-list');
+  if(!el)return;
+  if(myKusitlusMallid.length===0){
+    el.innerHTML='<div style="text-align:center;padding:14px;color:var(--text3);font-size:13px;border:1px dashed var(--border);border-radius:8px;">Veel pole ühtegi malli.</div>';
+    return;
+  }
+  el.innerHTML='<div style="display:flex;flex-direction:column;gap:6px;">'+myKusitlusMallid.map(m=>`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+        <div style="font-size:13px;font-weight:600;color:var(--text);">📋 ${escapeHtml(m.nimi||'Mall')}</div>
+        <div style="display:flex;gap:5px;">
+          <button onclick="editKusitlusMall('${m.id}')" style="font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">✏️</button>
+          <button onclick="deleteKusitlusMall('${m.id}')" style="font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid rgba(220,38,38,0.3);background:var(--surface);color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif;">🗑</button>
+        </div>
+      </div>
+      <ol style="margin:0;padding-left:16px;font-size:11px;color:var(--text3);">${(m.read||[]).map(r=>`<li>${escapeHtml(r)}</li>`).join('')}</ol>
+    </div>`).join('')+'</div>';
+}
+
+function editVarustusMall(id){
+  const m=myVarustusMallid.find(mm=>mm.id===id);if(!m)return;
+  document.getElementById('vm-uus-nimi').value=m.nimi||'';
+  document.getElementById('vm-uus-nimi').dataset.editId=id;
+  document.getElementById('vm-uus-read').innerHTML='';
+  (m.read||[]).forEach(r=>lisaVmRida(r));
+  document.getElementById('vm-uus-nimi').scrollIntoView({behavior:'smooth'});
+}
+function editKusitlusMall(id){
+  const m=myKusitlusMallid.find(mm=>mm.id===id);if(!m)return;
+  document.getElementById('km-uus-nimi').value=m.nimi||'';
+  document.getElementById('km-uus-nimi').dataset.editId=id;
+  document.getElementById('km-uus-read').innerHTML='';
+  (m.read||[]).forEach(r=>lisaKmRida(r));
+  document.getElementById('km-uus-nimi').scrollIntoView({behavior:'smooth'});
+}
+
+async function submitUusVarustusMall(){
+  const nimi=document.getElementById('vm-uus-nimi').value.trim();
+  const read=[...document.querySelectorAll('.vm-rida-item')].map(i=>i.value.trim()).filter(Boolean);
+  const editId=document.getElementById('vm-uus-nimi').dataset.editId;
+  if(!nimi){alert('Anna mallile nimi');return;}
+  if(read.length===0){alert('Lisa vähemalt üks rida');return;}
+  const fb=window.fb;
+  if(editId){
+    await fb.updateDoc(fb.doc(fb.db,'varustusmallid',editId),{nimi,read});
+    document.getElementById('vm-uus-nimi').dataset.editId='';
+  } else {
+    await fb.addDoc(fb.collection(fb.db,'varustusmallid'),{uid:currentUser.uid,nimi,read,createdAt:fb.serverTimestamp()});
+  }
+  document.getElementById('vm-uus-nimi').value='';
+  document.getElementById('vm-uus-read').innerHTML='';
+  await loadVarustusMallid();
+  renderVarustusMallideList();
+}
+
+async function submitUusKusitlusMall(){
+  const nimi=document.getElementById('km-uus-nimi').value.trim();
+  const read=[...document.querySelectorAll('.km-rida-item')].map(i=>i.value.trim()).filter(Boolean);
+  const editId=document.getElementById('km-uus-nimi').dataset.editId;
+  if(!nimi){alert('Anna mallile nimi');return;}
+  if(read.length===0){alert('Lisa vähemalt üks küsimus');return;}
+  const fb=window.fb;
+  if(editId){
+    await fb.updateDoc(fb.doc(fb.db,'kusitlusmallid',editId),{nimi,read});
+    document.getElementById('km-uus-nimi').dataset.editId='';
+  } else {
+    await fb.addDoc(fb.collection(fb.db,'kusitlusmallid'),{uid:currentUser.uid,nimi,read,createdAt:fb.serverTimestamp()});
+  }
+  document.getElementById('km-uus-nimi').value='';
+  document.getElementById('km-uus-read').innerHTML='';
+  await loadKusitlusMallid();
+  renderKusitlusMallideList();
+}
+
+async function deleteVarustusMall(id){
+  if(!confirm('Kustuta see mall?'))return;
+  await window.fb.deleteDoc(window.fb.doc(window.fb.db,'varustusmallid',id));
+  await loadVarustusMallid();
+  renderVarustusMallideList();
+}
+async function deleteKusitlusMall(id){
+  if(!confirm('Kustuta see mall?'))return;
+  await window.fb.deleteDoc(window.fb.doc(window.fb.db,'kusitlusmallid',id));
+  await loadKusitlusMallid();
+  renderKusitlusMallideList();
 }
 
 

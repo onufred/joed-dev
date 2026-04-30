@@ -253,6 +253,12 @@
   .c-msg:hover .c-msg-actions { opacity:1; }
   .c-msg-actions button { font-size:10px; padding:2px 7px; border-radius:5px; border:1px solid var(--surface2); background:transparent; color:var(--text3); cursor:pointer; font-family:'DM Sans',sans-serif; }
   .c-msg-actions button:hover { background:var(--surface2); color:var(--text); }
+  .c-reactions { display:flex; gap:4px; margin-top:5px; flex-wrap:wrap; }
+  .c-react-btn { background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:2px 8px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:3px; transition:all .1s; }
+  .c-react-btn span { font-size:11px; color:var(--text2); font-family:'DM Mono',monospace; }
+  .c-react-btn:hover { background:var(--surface2); border-color:var(--accent); }
+  .c-react-btn.active { background:rgba(45,90,61,0.12); border-color:var(--accent); }
+  .c-react-btn.active span { color:var(--accent); font-weight:600; }
   .c-compose { padding:8px 0; }
   #c-text { width:100%; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:'DM Sans',sans-serif; font-size:13px; resize:vertical; box-sizing:border-box; min-height:60px; }
   #c-text:focus { outline:none; border-color:var(--accent); }
@@ -479,6 +485,10 @@
       <div id="c-login-prompt" style="display:none;">
         <p style="font-size:13px;color:var(--text2);margin-bottom:8px;">Logi sisse, et osaleda vestluses</p>
         <button class="btn btn-primary" onclick="closeChat();doLogin();">🔐 Logi sisse Google'iga</button>
+      </div>
+      <div id="c-premium-prompt" style="display:none;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;text-align:center;">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:6px;">⭐ Kirjutamine on Premium kasutajatele</p>
+        <p style="font-size:11px;color:var(--text3);">Saad sõnumeid lugeda — kirjutamiseks vajad Premium taset</p>
       </div>
       <div id="c-input-row" style="display:none;">
         <textarea id="c-text" placeholder="Kirjuta sõnum... (nt 'Sõitsin täna, vesi on hea')" maxlength="1000" rows="2"></textarea>
@@ -3954,13 +3964,22 @@ function closeChat(){
 function refreshChatCompose(){
   const loginPrompt=document.getElementById('c-login-prompt');
   const inputRow=document.getElementById('c-input-row');
+  const premiumPrompt=document.getElementById('c-premium-prompt');
   if(!loginPrompt||!inputRow)return;
-  if(currentUser){
-    loginPrompt.style.display='none';
-    inputRow.style.display='block';
-  } else {
+  if(!currentUser){
     loginPrompt.style.display='block';
     inputRow.style.display='none';
+    if(premiumPrompt)premiumPrompt.style.display='none';
+  } else if(!canCreateLoik()){
+    // FREE kasutaja — näeb ainult
+    loginPrompt.style.display='none';
+    inputRow.style.display='none';
+    if(premiumPrompt)premiumPrompt.style.display='block';
+  } else {
+    // Premium+ — saab kirjutada
+    loginPrompt.style.display='none';
+    inputRow.style.display='block';
+    if(premiumPrompt)premiumPrompt.style.display='none';
   }
 }
 
@@ -4006,6 +4025,21 @@ function renderMessages(msgs){
     const isMine=m.uid===myUid;
     const time=m.ts&&m.ts.toDate?fmtChatTime(m.ts.toDate()):'…';
     const photo=m.photoURL?`<img class="c-msg-avatar" src="${escapeHtml(m.photoURL)}" alt=""/>`:`<div class="c-msg-avatar-fallback">${(m.name||'?').charAt(0).toUpperCase()}</div>`;
+    // Reaktsioonid
+    const EMOJIS=['👍','❤️','😂','😮'];
+    const reactions=m.reactions||{};
+    let reactHtml='<div class="c-reactions">';
+    for(const emoji of EMOJIS){
+      const count=(reactions[emoji]||[]).length;
+      const active=myUid&&(reactions[emoji]||[]).includes(myUid);
+      reactHtml+=`<button class="c-react-btn${active?' active':''}" onclick="toggleReaction('${m.id}','${emoji}')" title="${emoji}">${emoji}${count>0?` <span>${count}</span>`:''}</button>`;
+    }
+    reactHtml+='</div>';
+    // Teata + kustuta nupud
+    let actionsHtml='<div class="c-msg-actions">';
+    if(isMine) actionsHtml+=`<button onclick="deleteMessage('${m.id}')">🗑 Kustuta</button>`;
+    else if(currentUser) actionsHtml+=`<button onclick="reportMessage('${m.id}','${escapeHtml(m.name||'').replace(/'/g,"\\'")}')">⚠️ Teata</button>`;
+    actionsHtml+='</div>';
     html+=`<div class="c-msg ${isMine?'mine':''}">
       ${photo}
       <div class="c-msg-body">
@@ -4014,12 +4048,12 @@ function renderMessages(msgs){
           <span class="c-msg-time">${time}</span>
         </div>
         <div class="c-msg-text">${escapeHtml(m.text||'')}</div>
-        ${isMine?`<div class="c-msg-actions"><button onclick="deleteMessage('${m.id}')">Kustuta</button></div>`:''}
+        ${reactHtml}
+        ${actionsHtml}
       </div>
     </div>`;
   }
   el.innerHTML=html;
-  // Keri alla uusimate poole
   el.scrollTop=el.scrollHeight;
 }
 
@@ -4062,6 +4096,48 @@ async function sendMessage(){
 }
 
 // Kustuta oma sõnum
+// Reaktsioon sõnumile
+async function toggleReaction(msgId, emoji){
+  if(!currentUser){alert('Logi sisse, et reageerida');return;}
+  if(!window.fb)return;
+  try{
+    const fb=window.fb;
+    const ref=fb.doc(fb.db,'messages',msgId);
+    const snap=await fb.getDoc(ref);
+    if(!snap.exists())return;
+    const reactions=snap.data().reactions||{};
+    const arr=reactions[emoji]||[];
+    const idx=arr.indexOf(currentUser.uid);
+    if(idx>=0) arr.splice(idx,1);      // eemalda
+    else arr.push(currentUser.uid);     // lisa
+    await fb.updateDoc(ref,{[`reactions.${emoji}`]:arr});
+  }catch(err){console.warn('Reaktsioon ebaõnnestus:', err);}
+}
+
+// Teata sobimatust
+async function reportMessage(msgId, senderName){
+  if(!currentUser){alert('Logi sisse, et teatada');return;}
+  const reason=prompt(`Teata sõnumist (${senderName||'kasutaja'}).\n\nMis on probleem?\n(nt spämm, solvav sisu, reklaam)`);
+  if(!reason)return;
+  if(!window.fb)return;
+  try{
+    const fb=window.fb;
+    await fb.addDoc(fb.collection(fb.db,'reports'),{
+      msgId,
+      senderName: senderName||'',
+      reporterUid: currentUser.uid,
+      reporterName: currentUser.displayName||currentUser.email||'',
+      reason,
+      ts: fb.serverTimestamp(),
+      status: 'new'
+    });
+    alert('Teade saadetud. Täname, et hoiad kogukonda puhtana! 🙏');
+  }catch(err){
+    console.warn('Teate saatmine ebaõnnestus:', err);
+    alert('Teate saatmine ebaõnnestus. Proovi uuesti.');
+  }
+}
+
 async function deleteMessage(id){
   if(!currentUser)return;
   if(!confirm('Kustuta see sõnum?'))return;

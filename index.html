@@ -3703,11 +3703,25 @@ function renderJoinedList(matkaSnaps, joinDates){
 let trackMap=null;
 let trackUnsubscribe=null;
 let trackMarkers={}; // uid → Leaflet marker
+let trackUserHistory={}; // uid → [{lat, lng, ts}, ...] kiiruse arvutamiseks
+let trackMatkaEndPoint=null; // matka lõpp-punkt matkajuhi vaatele
 
-function openTrackingMap(matkaId, matkaNimi){
+async function openTrackingMap(matkaId, matkaNimi){
   document.getElementById('track-title').textContent='🗺️ '+matkaNimi;
-  document.getElementById('track-sub').textContent='Reaalajas uuenev · Ainult aktiivsed osalejad';
+  document.getElementById('track-sub').textContent='Reaalajas uuenev · Klõpsa nimel → suumi peale';
+  trackMatkaEndPoint=null;
+  trackUserHistory={};
   document.getElementById('trackmodal').classList.add('open');
+  // Lae matka lõpp-punkt
+  if(window.fb){
+    try{
+      const fb=window.fb;
+      const snap=await new Promise((resolve,reject)=>{
+        const unsub=fb.onSnapshot(fb.doc(fb.db,'matkad',matkaId),s=>{unsub();resolve(s);},reject);
+      });
+      if(snap.exists()) trackMatkaEndPoint=findMatkaEndPoint(snap.data());
+    }catch(e){}
+  }
   setTimeout(()=>initTrackMap(matkaId), 80);
 }
 
@@ -3716,6 +3730,8 @@ function closeTrackingMap(){
   if(trackUnsubscribe){trackUnsubscribe();trackUnsubscribe=null;}
   if(trackMap){trackMap.remove();trackMap=null;}
   trackMarkers={};
+  trackUserHistory={};
+  trackMatkaEndPoint=null;
 }
 
 function initTrackMap(matkaId){
@@ -3813,21 +3829,71 @@ function renderTrackList(users){
   const active=users.filter(u=>u.active!==false);
   const inactive=users.filter(u=>u.active===false);
   let html=`<div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600;">👥 Aktiivseid: ${active.length} / Kokku: ${users.length}</div>`;
-  html+='<div style="display:flex;flex-direction:column;gap:5px;">';
+  html+='<div style="display:flex;flex-direction:column;gap:6px;">';
   for(const d of [...active, ...inactive]){
     const updatedAt=d.updatedAt?.toDate?.();
     const ageMin=updatedAt?Math.round((Date.now()-updatedAt.getTime())/60000):null;
     const ageStr=ageMin===null?'—':(ageMin<1?'just nüüd':(ageMin<60?ageMin+' min tagasi':(Math.floor(ageMin/60)+' h tagasi')));
-    const statusDot=d.active!==false?'🟢':'⚫';
-    const photo=d.photoURL?`<img src="${escapeHtml(d.photoURL)}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;" alt=""/>`
-      :`<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:600;">${(d.name||'?').charAt(0).toUpperCase()}</div>`;
-    html+=`<div onclick="trackMarkers['${d.uid}']&&trackMap.setView(trackMarkers['${d.uid}'].getLatLng(),15)" style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface);border:1px solid var(--surface2);border-radius:6px;cursor:pointer;" title="Klõpsa kaardil leidmiseks">
+    const isActive=d.active!==false;
+
+    // Arvuta kiirus Firestore andmetest (totalDistanceKm + trackingStartedAt)
+    let speedKmh=null;
+    if(isActive&&d.totalDistanceKm&&d.trackingStartedAt){
+      const startTs=d.trackingStartedAt?.toDate?.()?.getTime?.();
+      if(startTs&&d.totalDistanceKm>0.01){
+        const elapsedH=(Date.now()-startTs)/3600000;
+        if(elapsedH>0.005){
+          const v=d.totalDistanceKm/elapsedH;
+          if(v>=0.3&&v<=15)speedKmh=v;
+        }
+      }
+    }
+
+    // Arvuta distants lõpuni ja ETA
+    let distKm=null, etaStr=null;
+    if(isActive&&d.lat&&d.lng&&trackMatkaEndPoint){
+      // Proovi BRouter cache'st
+      let found=false;
+      for(const key in routeCache){
+        const latlngs=routeCache[key];
+        if(!latlngs||latlngs.length<2)continue;
+        const lastPt=latlngs[latlngs.length-1];
+        if(haversine(lastPt, trackMatkaEndPoint)<500){
+          const idx=nearestRouteIdx([d.lat,d.lng], latlngs);
+          if(idx>=0){distKm=routeLengthFrom(latlngs,idx)/1000;found=true;break;}
+        }
+      }
+      if(!found)distKm=haversine([d.lat,d.lng], trackMatkaEndPoint)/1000;
+      if(speedKmh&&speedKmh>0.3){
+        const min=Math.round((distKm/speedKmh)*60);
+        etaStr=min<60?min+' min':(Math.floor(min/60)+'h '+(min%60)+'min');
+      }
+    }
+
+    const photo=d.photoURL?`<img src="${escapeHtml(d.photoURL)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;" alt=""/>`
+      :`<div style="width:32px;height:32px;border-radius:50%;background:${isActive?'var(--accent)':'var(--text3)'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0;">${(d.name||'?').charAt(0).toUpperCase()}</div>`;
+
+    html+=`<div onclick="trackMarkers['${d.uid}']&&trackMap&&trackMap.setView(trackMarkers['${d.uid}'].getLatLng(),15)" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid ${isActive?'rgba(45,90,61,0.25)':'var(--surface2)'};border-radius:8px;cursor:pointer;">
       ${photo}
       <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;font-weight:500;color:var(--text);">${statusDot} ${escapeHtml(d.name||'—')}</div>
-        <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;">${ageStr}</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);">${escapeHtml(d.name||'—')}</div>
+        <div style="font-size:11px;color:${isActive?'var(--accent)':'var(--text3)'};margin-top:1px;">${isActive?'🟢 Aktiivne · '+ageStr:'⚫ Mitteaktiivne · '+ageStr}</div>
       </div>
-      ${d.lat?`<div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;">${d.lat.toFixed(4)}, ${d.lng.toFixed(4)}</div>`:''}
+      ${isActive?`<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;flex-shrink:0;min-width:90px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span style="font-size:10px;color:var(--text3);">🚣</span>
+          <span style="font-size:13px;font-weight:600;color:var(--text);font-family:'DM Mono',monospace;">${speedKmh!==null?speedKmh.toFixed(1)+' km/h':(hist.length<2?'…':'—')}</span>
+        </div>
+        ${distKm!==null?`<div style="display:flex;gap:8px;align-items:center;">
+          <span style="font-size:10px;color:var(--text3);">📏</span>
+          <span style="font-size:12px;font-weight:600;color:var(--text2);font-family:'DM Mono',monospace;">${distKm<1?(Math.round(distKm*1000)+'m'):(distKm.toFixed(1)+' km')}</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span style="font-size:10px;color:var(--text3);">⏱</span>
+          <span style="font-size:12px;font-weight:600;color:var(--text2);font-family:'DM Mono',monospace;">${etaStr||'…'}</span>
+        </div>`:''}
+        ${d.lat?`<a href="https://www.google.com/maps?q=${d.lat},${d.lng}" target="_blank" onclick="event.stopPropagation()" style="font-size:10px;color:var(--text3);text-decoration:none;padding:2px 6px;border:1px solid var(--border);border-radius:4px;margin-top:1px;">🗺️ Maps</a>`:''}
+      </div>`:'<div style="font-size:10px;color:var(--text3);">Peatatud</div>'}
     </div>`;
   }
   html+='</div>';
@@ -3932,9 +3998,18 @@ async function sendClientLocation(matkaId, pos){
   const lng=pos.coords.longitude;
   const acc=pos.coords.accuracy||50;
   const ts=pos.timestamp||Date.now();
-  clientLastPos={lat, lng, acc};
+  const prev=clientLastPos;
+  clientLastPos={lat, lng, acc, ts};
 
-  // Lisa ajalukku (täpsus < 80m ja liikunud > 3m eelmisest)
+  // Arvuta lisandunud distants eelmisest punktist
+  let addedKm=0;
+  if(prev&&prev.lat&&acc<80&&(prev.acc||0)<80){
+    const d=haversine([lat,lng],[prev.lat,prev.lng])/1000;
+    // Ignoreeri ebareaalseid hüppeid (>500m/update = GPS viga)
+    if(d<0.5)addedKm=d;
+  }
+
+  // Uuenda lokaalne ajalugu
   if(acc<80){
     const last=clientTrackingHistory[clientTrackingHistory.length-1];
     if(!last||haversine([lat,lng],[last.lat,last.lng])>3){
@@ -3943,20 +4018,25 @@ async function sendClientLocation(matkaId, pos){
     }
   }
 
-  // Saada Firestore'i
+  // Saada Firestore'i — uuendame jooksvalt
   try{
     const fb=window.fb;
-    await fb.setDoc(
-      fb.doc(fb.db, 'matkad', matkaId, 'asukohad', currentUser.uid),
-      {
-        uid: currentUser.uid,
-        name: currentUser.displayName||currentUser.email||'Kasutaja',
-        photoURL: currentUser.photoURL||null,
-        lat, lng, acc,
-        updatedAt: fb.serverTimestamp(),
-        active: true
-      }
-    );
+    const docRef=fb.doc(fb.db, 'matkad', matkaId, 'asukohad', currentUser.uid);
+    // Loe praegune dokument (et saada totalDistanceKm ja startedAt)
+    const snap=await fb.getDoc(docRef);
+    const existing=snap.exists()?snap.data():{};
+    const prevTotal=existing.totalDistanceKm||0;
+    const startedAt=existing.trackingStartedAt||fb.serverTimestamp();
+    await fb.setDoc(docRef, {
+      uid: currentUser.uid,
+      name: currentUser.displayName||currentUser.email||'Kasutaja',
+      photoURL: currentUser.photoURL||null,
+      lat, lng, acc,
+      updatedAt: fb.serverTimestamp(),
+      active: true,
+      trackingStartedAt: startedAt,
+      totalDistanceKm: prevTotal+addedKm
+    });
   }catch(err){
     console.warn('Asukoha saatmine ebaõnnestus:', err);
   }
@@ -3965,66 +4045,54 @@ async function sendClientLocation(matkaId, pos){
   updateClientTrackingBar(lat, lng);
 }
 
-// Uuenda tracking bari kiirus + ETA
-function updateClientTrackingBar(lat, lng){
-  // Kiirus
+// Uuenda tracking bari — kiirus Firestore andmetest
+async function updateClientTrackingBar(lat, lng){
+  if(!currentUser||!window.fb||!clientTrackingMatkaId)return;
+  // Loe Firestore'ist praegused andmed
   let avgKmh=null;
-  if(clientTrackingHistory.length>=3){
-    let totalKm=0, totalSec=0;
-    for(let i=1;i<clientTrackingHistory.length;i++){
-      const a=clientTrackingHistory[i-1], b=clientTrackingHistory[i];
-      totalKm+=haversine([a.lat,a.lng],[b.lat,b.lng])/1000;
-      totalSec+=(b.ts-a.ts)/1000;
-    }
-    if(totalSec>10&&totalKm>0.005){
-      avgKmh=(totalKm/totalSec)*3600;
-      // Ainult mõistlik aerutamise kiirus (0.5 - 15 km/h)
-      if(avgKmh<0.5||avgKmh>15)avgKmh=null;
-    }
-  }
-
-  // Distants lõpuni (mööda jõge kui BRouter joon on cache'is, muidu linnulennult)
-  let distKm=null;
-  let etaTekst='—';
-  if(clientTrackingEndPoint){
-    const endPt=clientTrackingEndPoint;
-    // Proovi BRouter cache-st
-    const cacheKey=`${endPt[0]},${endPt[1]}`;
-    let routeFound=false;
-    // Otsi routeCache-st lõpp-punktile lähedast marsruuti
-    for(const key in routeCache){
-      const latlngs=routeCache[key];
-      if(!latlngs||latlngs.length<2)continue;
-      const lastPt=latlngs[latlngs.length-1];
-      if(haversine(lastPt, endPt)<500){ // Lõpp-punkt on <500m marsruudi lõpust
-        const idx=nearestRouteIdx([lat,lng], latlngs);
-        if(idx>=0){
-          distKm=routeLengthFrom(latlngs, idx)/1000;
-          routeFound=true;
-          break;
+  try{
+    const fb=window.fb;
+    const snap=await fb.getDoc(fb.doc(fb.db,'matkad',clientTrackingMatkaId,'asukohad',currentUser.uid));
+    if(snap.exists()){
+      const d=snap.data();
+      const totalKm=d.totalDistanceKm||0;
+      const startTs=d.trackingStartedAt?.toDate?.()?.getTime?.();
+      if(startTs&&totalKm>0.01){
+        const elapsedH=(Date.now()-startTs)/3600000;
+        if(elapsedH>0.005){ // vähemalt ~18 sek
+          const v=totalKm/elapsedH;
+          if(v>=0.3&&v<=15)avgKmh=v;
         }
       }
     }
-    // Kui marsruuti pole cache'is, kasuta linnulennult
-    if(!routeFound){
-      distKm=haversine([lat,lng], endPt)/1000;
+  }catch(e){}
+
+  // Distants lõpuni
+  let distKm=null, etaTekst='—';
+  if(clientTrackingEndPoint){
+    let found=false;
+    for(const key in routeCache){
+      const latlngs=routeCache[key];
+      if(!latlngs||latlngs.length<2)continue;
+      if(haversine(latlngs[latlngs.length-1], clientTrackingEndPoint)<500){
+        const idx=nearestRouteIdx([lat,lng], latlngs);
+        if(idx>=0){distKm=routeLengthFrom(latlngs,idx)/1000;found=true;break;}
+      }
+    }
+    if(!found)distKm=haversine([lat,lng], clientTrackingEndPoint)/1000;
+    if(avgKmh&&avgKmh>0.3){
+      const min=Math.round((distKm/avgKmh)*60);
+      etaTekst=min<60?min+' min':(Math.floor(min/60)+'h '+(min%60)+'min');
+    } else {
+      etaTekst='kogub andmeid';
     }
   }
 
-  // ETA
-  if(distKm!==null&&avgKmh!==null&&avgKmh>0.3){
-    const min=Math.round((distKm/avgKmh)*60);
-    etaTekst=min<60?min+' min':(Math.floor(min/60)+'h '+(min%60)+'min');
-  } else if(distKm!==null){
-    etaTekst='kogub andmeid';
-  }
-
-  // Kuva
   const speedEl=document.getElementById('ctb-speed');
   const distEl=document.getElementById('ctb-dist');
   const etaEl=document.getElementById('ctb-eta');
-  if(speedEl)speedEl.textContent=avgKmh!==null?(avgKmh.toFixed(1)+' km/h'):'—';
-  if(distEl)distEl.textContent=distKm!==null?(distKm<1?(Math.round(distKm*1000)+'m'):(distKm.toFixed(1)+' km')):'—';
+  if(speedEl)speedEl.textContent=avgKmh!=null?(avgKmh.toFixed(1)+' km/h'):'…';
+  if(distEl)distEl.textContent=distKm!=null?(distKm<1?(Math.round(distKm*1000)+'m'):(distKm.toFixed(1)+' km')):'—';
   if(etaEl)etaEl.textContent=etaTekst;
 }
 

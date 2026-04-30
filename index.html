@@ -133,6 +133,7 @@
   .sdot.err { background: #dc2626; }
   @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
   @keyframes gpspulse { 0%{transform:scale(0.4);opacity:0.7} 100%{transform:scale(1.4);opacity:0} }
+  @keyframes slideUp { from{opacity:0;transform:translateX(-50%) translateY(30px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
   /* DEV badge - näitab arenduskeskkonda */
   #dev-badge { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); background: #d97706; color: #fff; padding: 4px 14px; border-radius: 14px; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 600; letter-spacing: 1px; z-index: 9999; box-shadow: 0 2px 8px rgba(217,119,6,0.4); cursor: help; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
@@ -2581,11 +2582,17 @@ async function updateUserStats(){
     const loigud=new Set(prevStats.loigudLabitud||[]);
     const loikKey=`${tripLoik?.jogi}__${tripLoik?.nimi}`;
     loigud.add(loikKey);
+    // Tuvasta Läti jõgi (LV märgiga river-andmetes)
+    const isLatvia=rivers_data&&[...rivers].some(r=>{
+      const found=allSt.find(s=>s.jogi===r);
+      return found&&found.country==='LV';
+    });
     await fb.updateDoc(ref,{
       'stats.totalKm': (prevStats.totalKm||0)+tripDistKm,
       'stats.tripsCount': (prevStats.tripsCount||0)+1,
       'stats.riversVisited': [...rivers],
       'stats.loigudLabitud': [...loigud],
+      'stats.latviaVisited': isLatvia||prevStats.latviaVisited||false,
       'stats.lastTripAt': fb.serverTimestamp(),
       'stats.firstTripAt': prevStats.firstTripAt||fb.serverTimestamp()
     });
@@ -2594,9 +2601,91 @@ async function updateUserStats(){
   }
 }
 
-function checkAchievements(){
-  // Täielik saavutuste süsteem tuleb etapis B
-  console.log('Saavutuste kontroll:', tripLoik?.nimi, tripDistKm.toFixed(2)+'km');
+// =============== SAAVUTUSTE SÜSTEEM ===============
+
+const ACHIEVEMENTS = [
+  // DISTANTS
+  { id:'km_10',    cat:'distants', icon:'🏅', nimi:'10 km klubi',       kirjeldus:'Läbi on sõidetud kokku 10 km',      check: s => (s.totalKm||0) >= 10 },
+  { id:'km_50',    cat:'distants', icon:'🥈', nimi:'50 km matkaja',      kirjeldus:'Kokku 50 km vett läbitud',          check: s => (s.totalKm||0) >= 50 },
+  { id:'km_100',   cat:'distants', icon:'🥇', nimi:'100 km legend',      kirjeldus:'Kokku 100 km — suur saavutus!',     check: s => (s.totalKm||0) >= 100 },
+  { id:'km_300',   cat:'distants', icon:'🏆', nimi:'300 km meister',     kirjeldus:'300 km — tõeline veesõitja',        check: s => (s.totalKm||0) >= 300 },
+  { id:'km_500',   cat:'distants', icon:'👑', nimi:'500 km grand master', kirjeldus:'500 km — eliitklass!',             check: s => (s.totalKm||0) >= 500 },
+  // SÕIDUD
+  { id:'trip_1',   cat:'soitu',    icon:'🚣', nimi:'Esimene sõit',       kirjeldus:'Läbisid esimese GPS-ga sõidu',      check: s => (s.tripsCount||0) >= 1 },
+  { id:'trip_5',   cat:'soitu',    icon:'🚣', nimi:'5 sõitu',            kirjeldus:'5 sõitu alla vöö',                  check: s => (s.tripsCount||0) >= 5 },
+  { id:'trip_20',  cat:'soitu',    icon:'🚣', nimi:'20 sõitu',           kirjeldus:'20 sõitu — kogemus kasvab',         check: s => (s.tripsCount||0) >= 20 },
+  { id:'trip_50',  cat:'soitu',    icon:'🚣', nimi:'50 sõitu',           kirjeldus:'50 sõitu — veteran!',               check: s => (s.tripsCount||0) >= 50 },
+  // JÕED
+  { id:'river_1',  cat:'joged',    icon:'🌊', nimi:'Esimene jõgi',       kirjeldus:'Läbisid esimese jõe',               check: s => (s.riversVisited||[]).length >= 1 },
+  { id:'river_3',  cat:'joged',    icon:'🌊', nimi:'Kolm jõge',          kirjeldus:'Oled sõitnud 3 erineval jõel',      check: s => (s.riversVisited||[]).length >= 3 },
+  { id:'river_5',  cat:'joged',    icon:'🗺️', nimi:'Maastikuuurija',     kirjeldus:'5 eri jõge läbitud',                check: s => (s.riversVisited||[]).length >= 5 },
+  { id:'river_10', cat:'joged',    icon:'🇪🇪', nimi:'Eesti aerutaja',    kirjeldus:'10 eri jõge — tunned Eestit!',      check: s => (s.riversVisited||[]).length >= 10 },
+  // LÕIGUD
+  { id:'loik_1',   cat:'loigud',   icon:'📍', nimi:'Esimene lõik',       kirjeldus:'Esimene GPS-ga läbitud lõik',       check: s => (s.loigudLabitud||[]).length >= 1 },
+  { id:'loik_5',   cat:'loigud',   icon:'📍', nimi:'5 lõiku',            kirjeldus:'5 eri lõiku läbitud',               check: s => (s.loigudLabitud||[]).length >= 5 },
+  { id:'loik_10',  cat:'loigud',   icon:'📍', nimi:'10 lõiku',           kirjeldus:'10 lõiku — hea tundmine!',          check: s => (s.loigudLabitud||[]).length >= 10 },
+  { id:'loik_25',  cat:'loigud',   icon:'🗺️', nimi:'25 lõiku',           kirjeldus:'25 lõiku — fanaatik!',              check: s => (s.loigudLabitud||[]).length >= 25 },
+  // EESTI + LÄTI
+  { id:'latvia',   cat:'joged',    icon:'🇱🇻', nimi:'Läti avastaja',     kirjeldus:'Sõitsid vähemalt ühel Läti jõel',   check: s => (s.latviaVisited||false) },
+];
+
+// Kontrolli saavutusi pärast sõidu lõpetamist
+async function checkAchievements(){
+  if(!currentUser||!window.fb)return;
+  try{
+    const fb=window.fb;
+    const snap=await fb.getDoc(fb.doc(fb.db,'users',currentUser.uid));
+    if(!snap.exists())return;
+    const data=snap.data();
+    const stats=data.stats||{};
+    const earned=new Set(data.achievements||[]);
+    const newlyEarned=[];
+    for(const a of ACHIEVEMENTS){
+      if(!earned.has(a.id)&&a.check(stats)){
+        earned.add(a.id);
+        newlyEarned.push(a);
+      }
+    }
+    if(newlyEarned.length>0){
+      // Salvesta Firestore'i
+      await fb.updateDoc(fb.doc(fb.db,'users',currentUser.uid),{
+        achievements: [...earned]
+      });
+      // Näita teavitust
+      showAchievementToast(newlyEarned);
+    }
+  }catch(err){
+    console.warn('Saavutuste kontroll ebaõnnestus:', err);
+  }
+}
+
+// Näita saavutuse toast teavitust
+function showAchievementToast(list){
+  for(let i=0;i<list.length;i++){
+    setTimeout(()=>{
+      const a=list[i];
+      const toast=document.createElement('div');
+      toast.style.cssText=`position:fixed;bottom:${80+i*80}px;left:50%;transform:translateX(-50%);z-index:99998;
+        background:linear-gradient(135deg,#1a4a2e,#2d5a3d);color:#fff;
+        border-radius:12px;padding:12px 18px;box-shadow:0 4px 20px rgba(0,0,0,0.3);
+        display:flex;align-items:center;gap:12px;min-width:260px;max-width:340px;
+        animation:slideUp .3s ease;font-family:'DM Sans',sans-serif;`;
+      toast.innerHTML=`
+        <div style="font-size:28px;flex-shrink:0;">${a.icon}</div>
+        <div>
+          <div style="font-size:11px;opacity:0.8;text-transform:uppercase;letter-spacing:0.5px;">🏆 Saavutus avatud!</div>
+          <div style="font-size:15px;font-weight:600;margin-top:2px;">${escapeHtml(a.nimi)}</div>
+          <div style="font-size:11px;opacity:0.75;margin-top:2px;">${escapeHtml(a.kirjeldus)}</div>
+        </div>`;
+      document.body.appendChild(toast);
+      setTimeout(()=>{
+        toast.style.transition='opacity .4s,transform .4s';
+        toast.style.opacity='0';
+        toast.style.transform='translateX(-50%) translateY(20px)';
+        setTimeout(()=>toast.remove(), 400);
+      }, 4000);
+    }, i*600);
+  }
 }
 
 // =============== STATISTIKA ===============
@@ -2608,7 +2697,8 @@ async function openStats(){
   try{
     const stats=await loadUserStats();
     const history=await loadTripHistory();
-    renderStats(stats, history);
+    const achievements=await loadUserAchievements();
+    renderStats(stats, history, achievements);
   }catch(err){
     console.error(err);
     document.getElementById('stats-content').innerHTML='<div style="text-align:center;padding:20px;color:var(--red);">⚠️ Laadimine ebaõnnestus</div>';
@@ -2643,13 +2733,21 @@ async function loadTripHistory(){
   return arr;
 }
 
-function renderStats(stats, history){
+async function loadUserAchievements(){
+  if(!window.fb)return[];
+  const fb=window.fb;
+  const snap=await fb.getDoc(fb.doc(fb.db,'users',currentUser.uid));
+  return snap.exists()?(snap.data().achievements||[]):[];
+}
+
+function renderStats(stats, history, history_achievements=[]){
   const el=document.getElementById('stats-content');
   if(!el)return;
   const totalKm=stats.totalKm||0;
   const tripsCount=stats.tripsCount||0;
   const rivers=stats.riversVisited||[];
   const loigud=stats.loigudLabitud||[];
+  const earned=new Set(history_achievements||[]);
   const firstTrip=stats.firstTripAt?.toDate?.();
   const lastTrip=stats.lastTripAt?.toDate?.();
   const firstStr=firstTrip?firstTrip.toLocaleDateString('et-EE',{day:'numeric',month:'long',year:'numeric'}):'—';
@@ -2719,6 +2817,24 @@ function renderStats(stats, history){
   if(lastTrip&&tripsCount>0){
     html+=`<div style="margin-top:10px;font-size:11px;color:var(--text3);text-align:center;">Viimane sõit: ${lastStr}</div>`;
   }
+
+  // Saavutused
+  const earnedCount=ACHIEVEMENTS.filter(a=>earned.has(a.id)).length;
+  html+=`<div style="margin-top:14px;">
+    <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">🏆 Saavutused — ${earnedCount}/${ACHIEVEMENTS.length}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">`;
+  for(const a of ACHIEVEMENTS){
+    const done=earned.has(a.id);
+    html+=`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:${done?'rgba(45,90,61,0.08)':'var(--surface)'};border:1px solid ${done?'rgba(45,90,61,0.2)':'var(--border)'};border-radius:8px;${done?'':'filter:grayscale(0.5);opacity:0.55;'}" title="${escapeHtml(a.kirjeldus)}">
+      <span style="font-size:20px;flex-shrink:0;">${done?a.icon:'🔒'}</span>
+      <div style="min-width:0;">
+        <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(a.nimi)}</div>
+        <div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${escapeHtml(a.kirjeldus)}</div>
+      </div>
+    </div>`;
+  }
+  html+='</div></div>';
+
   el.innerHTML=html;
 }
 

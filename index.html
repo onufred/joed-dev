@@ -368,6 +368,7 @@
       <div id="user-menu" style="display:none;">
         <div id="user-menu-email" style="padding:10px 14px; font-size:11px; color:var(--text3); border-bottom:1px solid var(--surface2); font-family:'DM Mono',monospace; word-break:break-all;"></div>
         <button class="user-menu-item" onclick="openStats();toggleUserMenu();">📊 Minu statistika</button>
+        <button class="user-menu-item" id="admin-menu-btn" style="display:none;" onclick="openAdminPanel();toggleUserMenu();">🛠️ Admin paneel</button>
         <button class="user-menu-item" onclick="doLogout()">🚪 Logi välja</button>
       </div>
     </div>
@@ -550,6 +551,22 @@
       <textarea id="cm-leping" rows="8" placeholder="Lepingu tekst..." style="width:100%;font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;line-height:1.5;"></textarea>
     </div>
     <div class="mrow"><label>Märkused (valikuline)</label><textarea id="cm-markused" rows="2" placeholder="Mida peaks teadma? Kohtumiskoht, varustus..." style="width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;"></textarea></div>
+    <div class="mrow">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <label style="margin:0;">🎒 Varustuse nimekiri (valikuline)</label>
+        <button onclick="lisaVarustuseRida()" style="font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">+ Lisa rida</button>
+      </div>
+      <div id="cm-varustus-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:4px;"></div>
+      <p style="font-size:11px;color:var(--text3);margin:0;">Kliendid näevad seda nimekirja matka lehel liitumisel.</p>
+    </div>
+    <div class="mrow">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <label style="margin:0;">📋 Tagasiside küsitlus (valikuline)</label>
+        <button onclick="lisaKusitlusKusimus()" style="font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">+ Lisa küsimus</button>
+      </div>
+      <div id="cm-kusitlus-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:4px;"></div>
+      <p style="font-size:11px;color:var(--text3);margin:0;">Kliendid saavad pärast matka vastata. Vastused tulevad sinu matka lehele.</p>
+    </div>
     <div class="mact">
       <button class="btn" onclick="closeCreateMatk()">Tühista</button>
       <button class="btn btn-primary" onclick="submitCreateMatk()">⛵ Loo matk</button>
@@ -637,6 +654,48 @@
   </div>
 </div>
 
+<!-- ADMIN PANEEL -->
+<div class="overlay" id="adminmodal">
+  <div class="modal vmodal">
+    <div class="modal-title">🛠️ Admin paneel</div>
+    <div id="admin-content" style="margin-top:8px;">
+      <div style="text-align:center;padding:20px;color:var(--text3);">⏳ Laen...</div>
+    </div>
+    <div class="mact">
+      <button class="btn btn-primary" onclick="closeAdminPanel()">Sulge</button>
+    </div>
+  </div>
+</div>
+
+<!-- SÕIDURAPORT -->
+<div class="overlay" id="raportmodal">
+  <div class="modal vmodal">
+    <div class="modal-title">📝 Sõiduraport</div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:12px;">Jaga infot teiste sõitjatega — oli vesi hea? Mis kärestikud töötavad?</p>
+    <div id="raport-info" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--text2);"></div>
+    <div class="mrow">
+      <label>Raport *</label>
+      <textarea id="raport-tekst" rows="4" maxlength="500" placeholder="nt Vesi oli hea, Nõmmeveski kärestik tootab kenasti. Ilm oli soe." style="width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;"></textarea>
+      <div style="font-size:11px;color:var(--text3);text-align:right;margin-top:2px;" id="raport-counter">0/500</div>
+    </div>
+    <div class="mrow">
+      <label>Veetase hinnang</label>
+      <select id="raport-hinnang" style="width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+        <option value="">— Vali —</option>
+        <option value="ideaalne">✅ Ideaalne</option>
+        <option value="hea">👍 Hea</option>
+        <option value="sobib">🆗 Sobib</option>
+        <option value="madal">⬇️ Liiga madal</option>
+        <option value="korge">⬆️ Liiga kõrge</option>
+      </select>
+    </div>
+    <div class="mact">
+      <button class="btn" onclick="closeRaport()">Tühista</button>
+      <button class="btn btn-primary" onclick="submitRaport()">📤 Avalda raport</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="clmodal">
   <div class="modal vmodal">
     <div class="modal-title">⭐ Loo oma jõe lõik</div>
@@ -673,6 +732,7 @@
 
 <script>
 const SK='rv9';
+const SK_LEMMIKUD='rv9_lemmikud'; // Lemmikuks märgitud jaamade ID-d
 // A=Veekogu, B=Jaam, C=Veetase(cm) — täpselt sinu Sheetsi struktuur
 const SHEET_ID='1ih6_OZSzPpxQvK4-kdfyMdZDO8j0C_CTPtMTjH3KFkY';
 const GVIZ_EE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=0';
@@ -1205,6 +1265,7 @@ function renderCard(r){
     <div class="card-foot">
       <span class="foot-src"><span class="fdot live"></span>KA · ${fmt(r.updated)}</span>
       <div class="foot-btns">
+        <button class="ibtn" onclick="toggleLemmik('${r.id}')" title="Lemmik" style="color:${isLemmik(r.id)?'#e11d48':'var(--text3)'};">${isLemmik(r.id)?'❤️':'🤍'}</button>
         <button class="ibtn" onclick="tog('${r.id}')">${ed?'✕':'⚙'}</button>
         <button class="ibtn" onclick="del('${r.id}')">🗑</button>
       </div>
@@ -1220,6 +1281,17 @@ function renderCard(r){
   </div>`;
 }
 
+// ---- LEMMIKUD ----
+function getLemmikud(){try{return new Set(JSON.parse(localStorage.getItem(SK_LEMMIKUD)||'[]'));}catch(e){return new Set();}}
+function saveLemmikud(s){localStorage.setItem(SK_LEMMIKUD,JSON.stringify([...s]));}
+function isLemmik(id){return getLemmikud().has(id);}
+function toggleLemmik(id){
+  const s=getLemmikud();
+  if(s.has(id))s.delete(id);else s.add(id);
+  saveLemmikud(s);
+  render();
+}
+
 function render(){
   const g=document.getElementById('grid');if(!g)return;
   if(rivers.length===0){
@@ -1230,7 +1302,24 @@ function render(){
     }
     return;
   }
-  g.innerHTML=rivers.map(renderCard).join('');
+  // Lemmikud ees
+  const lemmikud=getLemmikud();
+  const sorted=[...rivers].sort((a,b)=>{
+    const aL=lemmikud.has(a.id)?0:1;
+    const bL=lemmikud.has(b.id)?0:1;
+    return aL-bL;
+  });
+  const lemmikCount=sorted.filter(r=>lemmikud.has(r.id)).length;
+  let html='';
+  if(lemmikCount>0){
+    html+=`<div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;padding:2px 2px 6px;grid-column:1/-1;">❤️ Lemmikud</div>`;
+    html+=sorted.filter(r=>lemmikud.has(r.id)).map(renderCard).join('');
+    html+=`<div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;padding:10px 2px 6px;grid-column:1/-1;">Kõik jõed</div>`;
+    html+=sorted.filter(r=>!lemmikud.has(r.id)).map(renderCard).join('');
+  } else {
+    html+=sorted.map(renderCard).join('');
+  }
+  g.innerHTML=html;
 }
 
 function tog(id){editId=editId===id?null:id;render();}
@@ -1666,8 +1755,17 @@ function renderLoik(l){
   if(l.pikkus)html+=`<span class="vp-info-pill">📏 <b>${l.pikkus} km</b></span>`;
   if(l.raskus)html+=`<span class="vp-info-pill">⚡ <b>${l.raskus}</b></span>`;
   html+=`<span class="vp-info-pill">📍 <b>${myPunktid.length} punkti</b></span>`;
+  if(l.algus){
+    const navUrl=`https://www.google.com/maps/dir/?api=1&destination=${l.algus[0]},${l.algus[1]}&travelmode=driving`;
+    html+=`<a href="${navUrl}" target="_blank" rel="noopener" class="vp-btn" style="text-decoration:none;">🧭 Navigeeri</a>`;
+  }
   html+=`<button class="vp-btn" style="margin-left:auto;" onclick="openGraph('${(l.jogi||'').replace(/'/g,"\\\\'")}', ${l.algus?l.algus[0]:'null'}, ${l.algus?l.algus[1]:'null'})">📊 Graafik</button>`;
+  if(currentUser)html+=`<button class="vp-btn" onclick="openRaport('${(l.jogi||'').replace(/'/g,"\\\\'")}','${(l.nimi||'').replace(/'/g,"\\\\'")}')">📝 Raport</button>`;
   html+='</div>';
+  // Viimased raportid
+  html+=`<div id="loik-raportid" style="margin-bottom:8px;"></div>`;
+  // Laadi raportid asünkroonselt
+  setTimeout(()=>loadLoikRaportid(l.jogi, l.nimi), 100);
   // Märkused
   if(l.markused)html+=`<div class="vp-loik-mark">${l.markused}</div>`;
   // Legend
@@ -2898,6 +2996,183 @@ function hideTripBar(){
   if(window._tripBarInterval)clearInterval(window._tripBarInterval);
 }
 
+// =============== ADMIN PANEEL ===============
+
+async function openAdminPanel(){
+  if(!isAdmin()){alert('Ainult adminile');return;}
+  document.getElementById('adminmodal').classList.add('open');
+  document.getElementById('admin-content').innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">⏳ Laen...</div>';
+  try{
+    const fb=window.fb;
+    // Lae kasutajate arv, raportite arv, teadete arv
+    const [usersSnap, reportsSnap, tripsSnap] = await Promise.all([
+      new Promise((res,rej)=>{const u=fb.onSnapshot(fb.query(fb.collection(fb.db,'users'),fb.limit(100)),s=>{u();res(s);},rej);}),
+      new Promise((res,rej)=>{const u=fb.onSnapshot(fb.query(fb.collection(fb.db,'reports'),fb.orderBy('ts','desc'),fb.limit(20)),s=>{u();res(s);},rej);}),
+      new Promise((res,rej)=>{const u=fb.onSnapshot(fb.query(fb.collection(fb.db,'trips'),fb.orderBy('startTs','desc'),fb.limit(10)),s=>{u();res(s);},rej);}),
+    ]);
+    const users=[];usersSnap.forEach(d=>users.push({id:d.id,...d.data()}));
+    const reports=[];reportsSnap.forEach(d=>reports.push({id:d.id,...d.data()}));
+    const trips=[];tripsSnap.forEach(d=>trips.push({id:d.id,...d.data()}));
+    const tierCounts={free:0,premium:0,guide:0,admin:0};
+    users.forEach(u=>tierCounts[u.tier||'free']=(tierCounts[u.tier||'free']||0)+1);
+
+    let html=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:20px;font-weight:700;color:var(--accent);">${users.length}</div>
+        <div style="font-size:11px;color:var(--text3);">kasutajat</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:20px;font-weight:700;color:var(--accent);">${trips.length}</div>
+        <div style="font-size:11px;color:var(--text3);">viimast sõitu</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:20px;font-weight:700;color:${reports.filter(r=>r.status==='new').length>0?'#dc2626':'var(--accent)'};">${reports.filter(r=>r.status==='new').length}</div>
+        <div style="font-size:11px;color:var(--text3);">uusi teateid</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:20px;font-weight:700;color:var(--accent);">${tierCounts.premium||0}</div>
+        <div style="font-size:11px;color:var(--text3);">premium</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">👥 Kasutajad</div>
+    <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px;">`;
+    for(const u of users){
+      const tierColor={free:'#6b7280',premium:'#7c3aed',guide:'#2d5a3d',admin:'#dc2626'}[u.tier||'free']||'#6b7280';
+      html+=`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--surface2);border-radius:7px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(u.displayName||u.email||u.id)}</div>
+          <div style="font-size:10px;color:var(--text3);">${escapeHtml(u.email||'')} · km: ${(u.stats?.totalKm||0).toFixed(1)}</div>
+        </div>
+        <select onchange="adminSetTier('${u.id}',this.value)" style="font-size:11px;padding:3px 6px;border-radius:5px;border:1px solid ${tierColor};color:${tierColor};background:var(--surface);font-family:'DM Sans',sans-serif;">
+          ${['free','premium','guide','admin'].map(t=>`<option value="${t}"${u.tier===t?' selected':''}>${t}</option>`).join('')}
+        </select>
+      </div>`;
+    }
+    html+='</div>';
+    if(reports.length>0){
+      html+=`<div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">⚠️ Teated sobimatusest</div>`;
+      for(const r of reports){
+        const date=r.ts?.toDate?.()?.toLocaleDateString('et-EE')||'—';
+        html+=`<div style="padding:8px 10px;background:var(--surface);border:1px solid ${r.status==='new'?'rgba(220,38,38,0.3)':'var(--surface2)'};border-radius:7px;margin-bottom:5px;">
+          <div style="font-size:11px;font-weight:600;color:var(--text);">${escapeHtml(r.senderName||'?')} · ${date}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">${escapeHtml(r.reason||'')}</div>
+          ${r.status==='new'?`<button onclick="adminMarkReportDone('${r.id}')" style="margin-top:5px;font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text3);cursor:pointer;font-family:'DM Sans',sans-serif;">✓ Märgi vaadatuks</button>`:'<span style="font-size:10px;color:var(--text3);">✓ vaadatud</span>'}
+        </div>`;
+      }
+    }
+    document.getElementById('admin-content').innerHTML=html;
+  }catch(err){
+    document.getElementById('admin-content').innerHTML='<div style="text-align:center;padding:20px;color:var(--red);">⚠️ Viga: '+escapeHtml(err.message)+'</div>';
+  }
+}
+
+function closeAdminPanel(){document.getElementById('adminmodal').classList.remove('open');}
+
+async function adminSetTier(uid, tier){
+  if(!window.fb)return;
+  try{
+    await window.fb.updateDoc(window.fb.doc(window.fb.db,'users',uid),{tier});
+  }catch(err){alert('Viga: '+err.message);}
+}
+
+async function adminMarkReportDone(reportId){
+  if(!window.fb)return;
+  try{
+    await window.fb.updateDoc(window.fb.doc(window.fb.db,'reports',reportId),{status:'done'});
+    openAdminPanel(); // Laadi uuesti
+  }catch(err){alert('Viga: '+err.message);}
+}
+
+// =============== SÕIDURAPORTID ===============
+
+let activeRaportLoik=null;
+
+function openRaport(jogi, loikNimi){
+  if(!currentUser){alert('Logi sisse, et raporti kirjutada');return;}
+  activeRaportLoik={jogi, loikNimi};
+  document.getElementById('raport-info').textContent=`🚣 ${jogi} — ${loikNimi}`;
+  document.getElementById('raport-tekst').value='';
+  document.getElementById('raport-hinnang').value='';
+  document.getElementById('raport-counter').textContent='0/500';
+  document.getElementById('raportmodal').classList.add('open');
+  document.getElementById('raport-tekst').oninput=()=>{
+    const l=document.getElementById('raport-tekst').value.length;
+    document.getElementById('raport-counter').textContent=l+'/500';
+  };
+}
+
+function closeRaport(){document.getElementById('raportmodal').classList.remove('open');}
+
+async function submitRaport(){
+  if(!currentUser||!window.fb)return;
+  const tekst=document.getElementById('raport-tekst').value.trim();
+  const hinnang=document.getElementById('raport-hinnang').value;
+  if(!tekst){alert('Kirjuta raport');return;}
+  if(tekst.length>500){alert('Raport on liiga pikk');return;}
+  try{
+    const fb=window.fb;
+    // Otsi praegune veetase
+    const st=rivers.find(r=>r.jogi===activeRaportLoik?.jogi);
+    await fb.addDoc(fb.collection(fb.db,'raportid'),{
+      jogi: activeRaportLoik.jogi,
+      loik: activeRaportLoik.loikNimi,
+      tekst,
+      hinnang: hinnang||null,
+      veetase: st?.level||null,
+      veetaseJaam: st?.jaam||null,
+      uid: currentUser.uid,
+      nimi: currentUser.displayName||currentUser.email||'Kasutaja',
+      photoURL: currentUser.photoURL||null,
+      ts: fb.serverTimestamp()
+    });
+    closeRaport();
+    // Uuenda raportite nimekirja lõigu vaates
+    if(activeRaportLoik)loadLoikRaportid(activeRaportLoik.jogi, activeRaportLoik.loikNimi);
+    alert('✅ Raport avaldatud! Täname — see aitab teisi sõitjaid!');
+  }catch(err){
+    alert('Raporti salvestamine ebaõnnestus: '+err.message);
+  }
+}
+
+async function loadLoikRaportid(jogi, loikNimi){
+  const el=document.getElementById('loik-raportid');
+  if(!el||!window.fb)return;
+  try{
+    const fb=window.fb;
+    const snap=await new Promise((res,rej)=>{
+      const u=fb.onSnapshot(
+        fb.query(fb.collection(fb.db,'raportid'),fb.where('jogi','==',jogi),fb.where('loik','==',loikNimi),fb.orderBy('ts','desc'),fb.limit(5)),
+        s=>{u();res(s);},rej
+      );
+    });
+    if(snap.empty){el.innerHTML='';return;}
+    let html=`<div style="margin-bottom:10px;">
+      <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">📝 Viimased raportid</div>`;
+    snap.forEach(doc=>{
+      const d=doc.data();
+      const date=d.ts?.toDate?.()?.toLocaleDateString('et-EE',{day:'numeric',month:'short'})||'—';
+      const hinnangEmoji={ideaalne:'✅',hea:'👍',sobib:'🆗',madal:'⬇️',korge:'⬆️'}[d.hinnang]||'';
+      const photo=d.photoURL?`<img src="${escapeHtml(d.photoURL)}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0;" alt=""/>`:`<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:600;flex-shrink:0;">${(d.nimi||'?').charAt(0).toUpperCase()}</div>`;
+      html+=`<div style="display:flex;gap:8px;padding:8px 10px;background:var(--surface);border:1px solid var(--surface2);border-radius:7px;margin-bottom:5px;">
+        ${photo}
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+            <span style="font-size:11px;font-weight:500;color:var(--text2);">${escapeHtml(d.nimi||'?')}</span>
+            <span style="font-size:10px;color:var(--text3);">${date}${d.veetase?` · ${d.veetase}cm`:''} ${hinnangEmoji}</span>
+          </div>
+          <div style="font-size:12px;color:var(--text);margin-top:3px;line-height:1.4;">${escapeHtml(d.tekst||'')}</div>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
+    el.innerHTML=html;
+  }catch(err){
+    el.innerHTML='';
+    console.warn('Raportite laadimine ebaõnnestus:', err);
+  }
+}
+
 // =============== PUNKTI FOTOD ===============
 
 // Deterministlik ID punktile koordinaatide järgi
@@ -3251,6 +3526,8 @@ function updatePremiumUI(){
   // Ekspordi - AINULT admin (kasutab keskseid Sheetsi andmeid)
   const exportBtn=document.getElementById('export-btn');
   if(exportBtn)exportBtn.style.display=isAdmin()?'inline-block':'none';
+  const adminBtn=document.getElementById('admin-menu-btn');
+  if(adminBtn)adminBtn.style.display=isAdmin()?'block':'none';
   // Lähtesta - kõigil sisselogitutel (lokaalne, isiklik seade)
   const resetBtn=document.getElementById('reset-btn');
   if(resetBtn)resetBtn.style.display=currentUser?'inline-block':'none';
@@ -4154,6 +4431,10 @@ async function submitCreateMatk(){
   const hind=document.getElementById('cm-hind').value.trim();
   const leping=document.getElementById('cm-leping').value.trim();
   const markused=document.getElementById('cm-markused').value.trim();
+  // Varustuse nimekiri
+  const varustus=[...document.querySelectorAll('.cm-varustus-item')].map(i=>i.value.trim()).filter(Boolean);
+  // Tagasiside küsimused
+  const kusitlus=[...document.querySelectorAll('.cm-kusimus-item')].map(i=>i.value.trim()).filter(Boolean);
   if(!nimi){alert('Sisesta matka nimi');return;}
   if(!jogi){alert('Sisesta jõgi');return;}
   if(!leping){alert('Lepingu tekst on tühi');return;}
@@ -4165,17 +4446,38 @@ async function submitCreateMatk(){
   const result=await saveMatk({
     nimi, jogi, loik, algusAeg,
     maxOsalejaid: isNaN(max)?null:max,
-    hind, lepinguTekst: leping, markused
+    hind, lepinguTekst: leping, markused, varustus, kusitlus
   });
   if(result){
     closeCreateMatk();
     renderMyMatkad();
-    // Näita kohe loodud lingi-info
     const linkUrl=window.location.origin+window.location.pathname+'?join='+result.matkaCode;
     if(confirm('Matk loodud! 🎉\n\nLink jagamiseks:\n'+linkUrl+'\n\nKas tahad kohe kopeerida?')){
       copyMatkaLink(linkUrl);
     }
   }
+}
+
+// Varustuse rea lisamine
+function lisaVarustuseRida(val=''){
+  const list=document.getElementById('cm-varustus-list');
+  if(!list)return;
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;gap:6px;align-items:center;';
+  div.innerHTML=`<input class="cm-varustus-item" type="text" value="${escapeHtml(val)}" placeholder="nt Päästevest, veekindel kott..." style="flex:1;font-size:12px;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;"/>
+    <button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:14px;padding:4px;">✕</button>`;
+  list.appendChild(div);
+}
+
+// Küsimuse lisamine
+function lisaKusitlusKusimus(val=''){
+  const list=document.getElementById('cm-kusitlus-list');
+  if(!list)return;
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;gap:6px;align-items:center;';
+  div.innerHTML=`<input class="cm-kusimus-item" type="text" value="${escapeHtml(val)}" placeholder="nt Kuidas meeldis? Mis läks hästi?" style="flex:1;font-size:12px;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;"/>
+    <button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:14px;padding:4px;">✕</button>`;
+  list.appendChild(div);
 }
 
 
@@ -5085,7 +5387,13 @@ function renderJoinForm(){
       </div>
     </div>
     ${m.hind?`<div class="join-card" style="margin-bottom:12px;"><div class="join-card-title">Hind / Info</div><div style="font-size:13px;color:var(--text2);">${escapeHtml(m.hind)}</div></div>`:''}
-    ${m.markused?`<div class="join-card" style="margin-bottom:12px;"><div class="join-card-title">Märkused</div><div style="font-size:13px;color:var(--text2);">${escapeHtml(m.markused)}</div></div>`:''}`;
+    ${m.markused?`<div class="join-card" style="margin-bottom:12px;"><div class="join-card-title">Märkused</div><div style="font-size:13px;color:var(--text2);">${escapeHtml(m.markused)}</div></div>`:''}
+    ${(m.varustus&&m.varustus.length>0)?`<div class="join-card" style="margin-bottom:12px;">
+      <div class="join-card-title">🎒 Vajalik varustus</div>
+      <ul style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.8;">
+        ${m.varustus.map(v=>`<li>${escapeHtml(v)}</li>`).join('')}
+      </ul>
+    </div>`:''}`;
 
   // Lepingu tekst
   if(m.lepinguTekst){

@@ -71,8 +71,19 @@
       badge.textContent = '🛠 DEV';
       badge.title = 'Sa oled arenduskeskkonnas (veeretked-dev). Live keskkond: onufred.github.io/joed/';
       document.body.appendChild(badge);
-      // Lisa <title>-le ka
       document.title = '🛠 DEV — ' + document.title;
+    });
+  }
+  // Tuvasta in-app browser (Messenger, Facebook, Instagram jne)
+  const inAppUa = navigator.userAgent || '';
+  const isInAppBrowser = /FBAN|FBAV|Instagram|Messenger|LinkedInApp|Twitter|Line\/|MicroMessenger|WebView|wv\b/.test(inAppUa);
+  if (isInAppBrowser) {
+    document.addEventListener('DOMContentLoaded', () => {
+      const bar = document.createElement('div');
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#1d4ed8;color:#fff;padding:14px 16px;font-family:sans-serif;font-size:14px;text-align:center;line-height:1.6;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+      bar.innerHTML = '<b>⚠️ Google sisselogimine ei tööta Messengeri/Facebooki brauseris.</b><br>Vajuta <b>···</b> → <b>Ava Safari\'s</b> (iPhone) või <b>Ava Chrome\'is</b> (Android)';
+      document.body.appendChild(bar);
+      document.body.style.paddingTop = '90px';
     });
   }
 </script>
@@ -719,6 +730,15 @@ let gpsFollowing=false; // Kas kaart järgib kasutajat
 let gpsHistory=[]; // [{lat, lng, ts}, ...] viimased GPS punktid kiiruse arvutamiseks
 let gpsCurrentRoute=null; // Praeguse lõigu BRouter joone andmed [[lat,lng], ...] (km arvutamiseks)
 let gpsCurrentRouteTotalKm=0; // Joone kogupikkus (cache)
+
+// ---- SÕIDULOGI ----
+let tripActive=false; // Kas sõit on käimas
+let tripLoik=null; // Praeguse sõidu lõik {jogi, nimi, pikkus, algus, lopp, ...}
+let tripTrack=[]; // GPS punktid [{lat,lng,ts}] iga ~100m
+let tripDistKm=0; // Läbitud distants (km)
+let tripStartTs=null; // Sõidu alguse timestamp
+let tripFinished=false; // Kas lõpp-punkt tuvastatud
+let tripDocId=null; // Firestore dokumendi ID (jätkamiseks)
 const SK_DELETED='rv9_deleted'; // Kasutaja eemaldatud vaikimisi jõed (jaam-nimed)
 const SK_CUSTOMIZED='rv9_customized'; // Kasutaja muudetud jõed (jaam -> {kayakMin, raftMin, ...})
 
@@ -1610,7 +1630,7 @@ function renderLoik(l){
     html+='</div>';
   }
   // Kaart (koos GPS nupuga)
-  html+='<div style="position:relative;"><div id="vmap"></div><div class="gps-controls"><button id="gps-btn" onclick="toggleGps()">📍 Mu asukoht</button></div><div id="gps-info" class="gps-info" style="display:none;"></div></div>';
+  html+='<div style="position:relative;"><div id="vmap"></div><div class="gps-controls"><button id="gps-btn" onclick="toggleGps()">📍 Mu asukoht</button><button id="trip-btn" onclick="toggleTrip()" style="display:none;margin-left:6px;background:#16a34a;color:#fff;border:none;border-radius:7px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:\'DM Sans\',sans-serif;">🚣 Alusta sõitu</button></div><div id="gps-info" class="gps-info" style="display:none;"></div></div>';
   // Ilmaprognoosi paneel (täidetakse asünkroonselt)
   html+='<div id="weather-panel" class="weather-panel">⏳ Laen ilmaprognoosi...</div>';
   // Kontaktinfo plokk (Veeretked.ee)
@@ -2281,6 +2301,8 @@ function updateGps(pos, firstFix){
 
   // Värskenda info paneeli
   updateGpsInfo();
+  // Uuenda sõidulogi (kui sõit käib)
+  if(tripActive)updateTripGps(lat, lng, acc);
 }
 
 // Värskenda GPS info paneeli (distants, kiirus, aeg)
@@ -2340,6 +2362,239 @@ function updateGpsInfo(){
     html=`<div class="gpsi-item"><div class="gpsi-lbl">GPS</div><div class="gpsi-val">Kogun andmeid...</div></div>`;
   }
   panel.innerHTML=html;
+
+  // Näita/peida "Alusta sõitu" nupp
+  const tripBtn=document.getElementById('trip-btn');
+  if(tripBtn){
+    if(currentUser&&activeLoik&&gpsMarker){
+      tripBtn.style.display='inline-block';
+      if(tripActive){
+        tripBtn.style.background='#dc2626';
+        tripBtn.textContent='🏁 Lõpeta sõit';
+      } else {
+        tripBtn.style.background='#16a34a';
+        tripBtn.textContent='🚣 Alusta sõitu';
+      }
+    } else {
+      tripBtn.style.display='none';
+    }
+  }
+}
+
+// =============== SÕIDULOGI ===============
+
+function toggleTrip(){
+  if(!currentUser){alert('Logi kõigepealt sisse');return;}
+  if(!activeLoik){alert('Vali kõigepealt lõik kaardilt');return;}
+  if(!gpsMarker){alert('Lülita GPS sisse enne sõidu alustamist');return;}
+  if(tripActive){
+    finishTrip(true); // käsitsi lõpetamine
+  } else {
+    startTrip();
+  }
+}
+
+function startTrip(){
+  if(!activeLoik||!gpsMarker)return;
+  tripActive=true;
+  tripLoik={
+    jogi: activeLoik.jogi||'',
+    nimi: activeLoik.nimi||activeLoik.id||'',
+    pikkus: activeLoik.pikkus||null,
+    algus: activeLoik.algus||null,
+    lopp: activeLoik.lopp||null,
+    firestoreId: activeLoik.firestoreId||null,
+    isUserLoik: !!activeLoik.firestoreId
+  };
+  tripTrack=[];
+  tripDistKm=0;
+  tripStartTs=Date.now();
+  tripFinished=false;
+  tripDocId=null;
+  // Lisa esimene punkt
+  const p=gpsMarker.getLatLng();
+  tripTrack.push({lat:p.lat, lng:p.lng, ts:tripStartTs});
+  // Salvesta Firestore'i pooleli sõiduna
+  saveTripToFirestore('active');
+  // Näita bännerit
+  showTripBar();
+  updateGpsInfo();
+}
+
+async function saveTripToFirestore(status){
+  if(!currentUser||!window.fb||!tripLoik)return;
+  try{
+    const fb=window.fb;
+    const data={
+      uid: currentUser.uid,
+      jogi: tripLoik.jogi,
+      loik: tripLoik.nimi,
+      loikPikkus: tripLoik.pikkus||null,
+      distKm: Math.round(tripDistKm*100)/100,
+      startTs: tripStartTs,
+      endTs: status==='done'||status==='manual'?Date.now():null,
+      status, // 'active' | 'done' | 'manual'
+      track: tripTrack.slice(-200), // max 200 punkti
+      createdAt: fb.serverTimestamp()
+    };
+    if(tripDocId){
+      await fb.updateDoc(fb.doc(fb.db,'trips',tripDocId), data);
+    } else {
+      const ref=await fb.addDoc(fb.collection(fb.db,'trips'), data);
+      tripDocId=ref.id;
+    }
+  }catch(err){
+    console.warn('Sõidu salvestamine ebaõnnestus:', err);
+  }
+}
+
+// GPS uuendus sõidu ajal — lisa punkt iga ~100m
+function updateTripGps(lat, lng, acc){
+  if(!tripActive||tripFinished)return;
+  const last=tripTrack[tripTrack.length-1];
+  if(last&&acc<80){
+    const d=haversine([lat,lng],[last.lat,last.lng]);
+    if(d>=100){ // ~100m
+      tripTrack.push({lat,lng,ts:Date.now()});
+      tripDistKm+=d/1000;
+      // Salvesta Firestore'i (iga 500m)
+      if(Math.round(tripDistKm*10)%5===0){
+        saveTripToFirestore('active');
+      }
+    }
+  }
+  // Kontrolli lõpp-punkti lähedust
+  checkTripFinish(lat, lng);
+}
+
+// Kontrolli kas oleme lõpp-punktile piisavalt lähedal
+function checkTripFinish(lat, lng){
+  if(!tripActive||tripFinished||!tripLoik?.lopp)return;
+  const endPt=tripLoik.lopp;
+  const distToEnd=haversine([lat,lng], endPt);
+  // Adaptiivne raadius
+  const loikKm=tripLoik.pikkus||10;
+  const radius=loikKm<5?300:loikKm<20?500:1000;
+  // Minimaalne läbitud distants (30% lõigu pikkusest)
+  const minDist=(tripLoik.pikkus||5)*0.3*1000;
+  if(distToEnd<radius&&tripDistKm*1000>minDist){
+    tripFinished=true;
+    finishTrip(false); // automaatne lõpetamine
+  }
+}
+
+async function finishTrip(manual){
+  if(!tripActive)return;
+  tripActive=false;
+  // Salvesta lõplik seis
+  await saveTripToFirestore(manual?'manual':'done');
+  // Uuenda statistika
+  await updateUserStats();
+  // Kontrolli saavutusi
+  checkAchievements();
+  // Näita edu teadet
+  showTripResult(manual);
+  // Peida bänner
+  hideTripBar();
+  // Lähtesta
+  tripLoik=null;
+  tripTrack=[];
+  tripDistKm=0;
+  tripStartTs=null;
+  tripDocId=null;
+  updateGpsInfo();
+}
+
+async function updateUserStats(){
+  if(!currentUser||!window.fb)return;
+  try{
+    const fb=window.fb;
+    const ref=fb.doc(fb.db,'users',currentUser.uid);
+    const snap=await fb.getDoc(ref);
+    const prev=snap.exists()?snap.data():{};
+    const prevStats=prev.stats||{};
+    const rivers=new Set(prevStats.riversVisited||[]);
+    if(tripLoik?.jogi)rivers.add(tripLoik.jogi);
+    const loigud=new Set(prevStats.loigudLabitud||[]);
+    const loikKey=`${tripLoik?.jogi}__${tripLoik?.nimi}`;
+    loigud.add(loikKey);
+    await fb.updateDoc(ref,{
+      'stats.totalKm': (prevStats.totalKm||0)+tripDistKm,
+      'stats.tripsCount': (prevStats.tripsCount||0)+1,
+      'stats.riversVisited': [...rivers],
+      'stats.loigudLabitud': [...loigud],
+      'stats.lastTripAt': fb.serverTimestamp(),
+      'stats.firstTripAt': prevStats.firstTripAt||fb.serverTimestamp()
+    });
+  }catch(err){
+    console.warn('Statistika uuendamine ebaõnnestus:', err);
+  }
+}
+
+function checkAchievements(){
+  // Täielik saavutuste süsteem tuleb etapis B
+  // Praegu ainult logi konsooli
+  console.log('Saavutuste kontroll:', tripLoik?.nimi, tripDistKm.toFixed(2)+'km');
+}
+
+function showTripResult(manual){
+  const km=tripDistKm.toFixed(1);
+  const dur=tripStartTs?Math.round((Date.now()-tripStartTs)/60000):0;
+  const durTxt=dur<60?dur+' min':Math.floor(dur/60)+'h '+(dur%60)+'min';
+  const msg=manual
+    ?`🏁 Sõit lõpetatud!\n\n🚣 Lõik: ${tripLoik?.nimi||'—'}\n📏 Distants: ${km} km\n⏱ Kestus: ${durTxt}\n\nSalvestatud sinu ajalukku!`
+    :`🎉 Lõpp-punkt saavutatud!\n\n🚣 Lõik: ${tripLoik?.nimi||'—'}\n📏 Distants: ${km} km\n⏱ Kestus: ${durTxt}\n\n✅ Salvestatud ja arvestatud saavutuste hulka!`;
+  alert(msg);
+}
+
+// Püsiv sõidu bänner ekraani allosas
+function showTripBar(){
+  let bar=document.getElementById('trip-active-bar');
+  if(!bar){
+    bar=document.createElement('div');
+    bar.id='trip-active-bar';
+    bar.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:8999;background:rgba(22,163,74,0.95);backdrop-filter:blur(8px);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;';
+    bar.innerHTML=`
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="width:10px;height:10px;background:#fff;border-radius:50%;animation:gpspulse 2s ease-out infinite;flex-shrink:0;"></span>
+        <span id="trip-bar-name" style="font-size:12px;color:#fff;font-weight:600;"></span>
+      </div>
+      <div style="display:flex;gap:14px;">
+        <div style="text-align:center;">
+          <div style="font-size:9px;color:rgba(255,255,255,0.7);text-transform:uppercase;">Läbitud</div>
+          <div id="trip-bar-km" style="font-size:15px;font-weight:700;color:#fff;font-family:'DM Mono',monospace;">0.0 km</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:9px;color:rgba(255,255,255,0.7);text-transform:uppercase;">Kestus</div>
+          <div id="trip-bar-dur" style="font-size:15px;font-weight:700;color:#fff;font-family:'DM Mono',monospace;">0 min</div>
+        </div>
+      </div>
+      <button onclick="finishTrip(true)" style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif;flex-shrink:0;">🏁 Lõpeta</button>`;
+    document.body.appendChild(bar);
+    document.body.style.paddingBottom='60px';
+  }
+  const nameEl=document.getElementById('trip-bar-name');
+  if(nameEl)nameEl.textContent=`🚣 ${tripLoik?.jogi||''} — ${tripLoik?.nimi||''}`;
+  bar.style.display='flex';
+  // Uuenda iga 15 sek
+  if(window._tripBarInterval)clearInterval(window._tripBarInterval);
+  window._tripBarInterval=setInterval(()=>{
+    if(!tripActive){clearInterval(window._tripBarInterval);return;}
+    const kmEl=document.getElementById('trip-bar-km');
+    const durEl=document.getElementById('trip-bar-dur');
+    if(kmEl)kmEl.textContent=tripDistKm.toFixed(1)+' km';
+    if(durEl){
+      const min=Math.round((Date.now()-(tripStartTs||Date.now()))/60000);
+      durEl.textContent=min<60?min+' min':Math.floor(min/60)+'h '+(min%60)+'min';
+    }
+  },15000);
+}
+
+function hideTripBar(){
+  const bar=document.getElementById('trip-active-bar');
+  if(bar)bar.style.display='none';
+  document.body.style.paddingBottom='0';
+  if(window._tripBarInterval)clearInterval(window._tripBarInterval);
 }
 
 // =============== AUTH (GOOGLE LOGIN) ===============
@@ -2349,6 +2604,19 @@ let currentUser=null;
 async function doLogin(){
   if(!window.fb){
     alert('Firebase pole laetud. Proovi uuesti hetke pärast.');
+    return;
+  }
+  // Tuvasta in-app browser (Messenger, Facebook, Instagram jne)
+  const ua=navigator.userAgent||'';
+  const isInApp=/FBAN|FBAV|Instagram|Messenger|LinkedInApp|Twitter|Line\/|MicroMessenger|WebView|wv\b/.test(ua);
+  if(isInApp){
+    const url=window.location.href;
+    const msg='Google sisselogimine ei tööta Messengeri/Facebooki sisseehitatud brauseris.\n\n' +
+      'Palun ava see link päris brauseris:\n\n' +
+      '📱 iPhone: vajuta "..." → "Ava Safaris"\n' +
+      '🤖 Android: vajuta "..." → "Ava Chrome\'is"\n\n' +
+      'Link: '+url;
+    alert(msg);
     return;
   }
   // Kontrolli, kas kasutaja on juba nõusoleku andnud

@@ -3612,13 +3612,14 @@ function renderJoinForm(){
     </div>`;
     html+=`<div class="mact"><button class="btn" onclick="closeJoinModal()">Tühista</button></div>`;
   } else {
-    html+=`<div class="join-consent" onclick="document.getElementById('join-cb').click()">
-      <input type="checkbox" id="join-cb"/>
-      <label for="join-cb">Olen matka info ja lepingu teksti läbi lugenud ning nõustun osalema omal vastutusel. Annan nõusoleku oma nime ja e-posti hoidmiseks seoses selle matka korraldamisega.</label>
+    html+=`<div style="margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;text-align:center;">Vajutades nupule kinnitad, et oled lepinguga tutvunud ja nõustud osalema omal vastutusel.</div>
+      <button id="join-submit-btn" onclick="submitJoin()" style="width:100%;padding:16px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 4px 12px rgba(45,90,61,0.3);">
+        ✅ Nõustun lepinguga ja liitun matkaga
+      </button>
     </div>
     <div class="mact">
       <button class="btn" onclick="closeJoinModal()">Tühista</button>
-      <button class="btn btn-primary" id="join-submit-btn" onclick="submitJoin()">✅ Liitu matkaga</button>
     </div>`;
   }
   el.innerHTML=html;
@@ -3627,15 +3628,10 @@ function renderJoinForm(){
 // Kinnita liitumine
 async function submitJoin(){
   if(!currentUser){alert('Logi kõigepealt sisse');return;}
-  const cb=document.getElementById('join-cb');
-  if(!cb||!cb.checked){
-    alert('Pead kõigepealt lepinguga nõustuma (märgi linnuke)');
-    return;
-  }
   const m=activeJoinMatka;
   if(!m||!window.fb)return;
   const btn=document.getElementById('join-submit-btn');
-  if(btn){btn.disabled=true;btn.textContent='Liitun...';}
+  if(btn){btn.disabled=true;btn.textContent='⏳ Liitun...';}
   try{
     const fb=window.fb;
     // Salvesta osaleja

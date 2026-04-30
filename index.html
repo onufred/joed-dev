@@ -523,18 +523,42 @@
     <div class="mrow"><label>Hinna info / kirjeldus (valikuline)</label><input id="cm-hind" type="text" placeholder="nt 25€/inimene, sisaldab paadiprenti"/></div>
     <div class="mrow">
       <label>Lepingu mall</label>
-      <select id="cm-leping-mall" onchange="lisaLepinguMall()" style="width:100%;font-family:'DM Sans',sans-serif;font-size:12px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);margin-bottom:6px;">
-        <option value="">— Vali mall —</option>
-      </select>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+        <select id="cm-leping-mall" onchange="applyLepinguMall()" style="flex:1;font-family:'DM Sans',sans-serif;font-size:12px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+          <option value="">— Vali mall —</option>
+        </select>
+        <button onclick="openLepinguMallid()" style="flex-shrink:0;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text2);font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;">⚙️ Halda</button>
+      </div>
     </div>
     <div class="mrow">
-      <label>Lepingu tekst (omavastutus, enesedeklaratsioon) *</label>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <label style="margin:0;">Lepingu tekst *</label>
+        <button onclick="saveCurrentAsMall()" style="font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">💾 Salvesta mallina</button>
+      </div>
       <textarea id="cm-leping" rows="8" placeholder="Lepingu tekst..." style="width:100%;font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;line-height:1.5;"></textarea>
     </div>
     <div class="mrow"><label>Märkused (valikuline)</label><textarea id="cm-markused" rows="2" placeholder="Mida peaks teadma? Kohtumiskoht, varustus..." style="width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;"></textarea></div>
     <div class="mact">
       <button class="btn" onclick="closeCreateMatk()">Tühista</button>
       <button class="btn btn-primary" onclick="submitCreateMatk()">⛵ Loo matk</button>
+    </div>
+  </div>
+</div>
+
+<!-- LEPINGU MALLIDE HALDAMINE -->
+<div class="overlay" id="lepingumodal">
+  <div class="modal vmodal">
+    <div class="modal-title">📄 Lepingu mallid</div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:12px;">Loo ja halda lepingu malle. Mallid salvestatakse sinu kontoga ja saad neid matka loomisel kasutada.</p>
+    <div id="lm-list" style="margin-bottom:12px;"></div>
+    <div style="border-top:1px solid var(--border);padding-top:12px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px;">➕ Uus mall</div>
+      <input id="lm-uus-nimi" type="text" placeholder="Malli nimi (nt 'Rühmamatkade leping')" style="width:100%;margin-bottom:6px;"/>
+      <textarea id="lm-uus-tekst" rows="6" placeholder="Lepingu tekst..." style="width:100%;font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;line-height:1.5;margin-bottom:8px;"></textarea>
+      <button class="btn btn-primary" onclick="submitUusMall()" style="width:100%;">💾 Salvesta mall</button>
+    </div>
+    <div class="mact" style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="closeLepinguMallid()">Sulge</button>
     </div>
   </div>
 </div>
@@ -3353,7 +3377,7 @@ async function loadMyMatkad(){
 
 // Lae kasutaja lepingu mallid
 async function loadMyLepinguMallid(){
-  if(!currentUser||!window.fb||!isGuide()){myLepinguMallid=[];return;}
+  if(!currentUser||!window.fb||!canCreateLoik()){myLepinguMallid=[];return;}
   try{
     const fb=window.fb;
     const q=fb.query(
@@ -3409,7 +3433,7 @@ async function saveMatk(data){
 
 // Salvesta lepingu mall
 async function saveLepinguMall(nimi, tekst){
-  if(!currentUser||!window.fb||!isGuide())return null;
+  if(!currentUser||!window.fb||!canCreateLoik())return null;
   try{
     const fb=window.fb;
     const ref=await fb.addDoc(fb.collection(fb.db, 'lepingumallid'), {
@@ -3764,9 +3788,99 @@ async function saveCurrentAsMall(){
   if(!nimi)return;
   const id=await saveLepinguMall(nimi, tekst);
   if(id){
-    alert('Mall salvestatud!');
+    alert('Mall salvestatud! Leiad selle rippmenüüst.');
     renderLepingumallid();
   }
+}
+
+// Ava mallide haldamise modal
+async function openLepinguMallid(){
+  document.getElementById('lepingumodal').classList.add('open');
+  document.getElementById('lm-uus-nimi').value='';
+  document.getElementById('lm-uus-tekst').value='';
+  await loadMyLepinguMallid();
+  renderLepinguMallideList();
+}
+
+function closeLepinguMallid(){
+  document.getElementById('lepingumodal').classList.remove('open');
+  renderLepingumallid(); // uuenda rippmenüü
+}
+
+function renderLepinguMallideList(){
+  const el=document.getElementById('lm-list');
+  if(!el)return;
+  if(myLepinguMallid.length===0){
+    el.innerHTML=`<div style="text-align:center;padding:16px;color:var(--text3);font-size:13px;border:1px dashed var(--border);border-radius:8px;">Veel pole ühtegi malli.<br>Lisa alla oma esimene mall.</div>`;
+    return;
+  }
+  let html='<div style="display:flex;flex-direction:column;gap:8px;">';
+  for(const m of myLepinguMallid){
+    html+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="font-size:13px;font-weight:600;color:var(--text);">📄 ${escapeHtml(m.nimi||'Mall')}</div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="editLepinguMall('${m.id}')" style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">✏️ Muuda</button>
+          <button onclick="deleteLepinguMall('${m.id}')" style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid rgba(220,38,38,0.3);background:var(--surface);color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif;">🗑</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.4;max-height:48px;overflow:hidden;">${escapeHtml((m.tekst||'').substring(0,150))}${(m.tekst||'').length>150?'...':''}</div>
+    </div>`;
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function editLepinguMall(mallId){
+  const m=myLepinguMallid.find(mm=>mm.id===mallId);
+  if(!m)return;
+  document.getElementById('lm-uus-nimi').value=m.nimi||'';
+  document.getElementById('lm-uus-tekst').value=m.tekst||'';
+  // Märgi muutmiseks
+  document.getElementById('lm-uus-nimi').dataset.editId=mallId;
+  document.getElementById('lm-uus-nimi').focus();
+  // Scroll alla
+  document.getElementById('lm-uus-nimi').scrollIntoView({behavior:'smooth'});
+}
+
+async function submitUusMall(){
+  const nimi=document.getElementById('lm-uus-nimi').value.trim();
+  const tekst=document.getElementById('lm-uus-tekst').value.trim();
+  const editId=document.getElementById('lm-uus-nimi').dataset.editId;
+  if(!nimi){alert('Anna mallile nimi');return;}
+  if(!tekst){alert('Lepingu tekst on tühi');return;}
+  if(editId){
+    // Uuenda olemasolevat
+    try{
+      const fb=window.fb;
+      await fb.updateDoc(fb.doc(fb.db,'lepingumallid',editId),{nimi,tekst});
+      delete document.getElementById('lm-uus-nimi').dataset.editId;
+      document.getElementById('lm-uus-nimi').value='';
+      document.getElementById('lm-uus-tekst').value='';
+      await loadMyLepinguMallid();
+      renderLepinguMallideList();
+      renderLepingumallid();
+    }catch(err){alert('Uuendamine ebaõnnestus: '+err.message);}
+  } else {
+    // Uus mall
+    const id=await saveLepinguMall(nimi, tekst);
+    if(id){
+      document.getElementById('lm-uus-nimi').value='';
+      document.getElementById('lm-uus-tekst').value='';
+      renderLepinguMallideList();
+    }
+  }
+}
+
+async function deleteLepinguMall(mallId){
+  if(!confirm('Kustuta see mall?'))return;
+  try{
+    const fb=window.fb;
+    await fb.deleteDoc(fb.doc(fb.db,'lepingumallid',mallId));
+    await loadMyLepinguMallid();
+    renderLepinguMallideList();
+    renderLepingumallid();
+  }catch(err){alert('Kustutamine ebaõnnestus: '+err.message);}
 }
 
 // Salvesta uus matk

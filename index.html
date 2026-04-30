@@ -305,6 +305,18 @@
   .app-footer { max-width:1100px; margin:30px auto 20px; padding:20px 24px; border-top:1px solid var(--surface2); display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; font-size:11px; color:var(--text3); font-family:'DM Mono', monospace; }
   .app-footer a { color:var(--text2); text-decoration:none; border-bottom:1px dotted var(--text3); }
   .app-footer a:hover { color:var(--accent); border-bottom-color:var(--accent); }
+  /* Liitumise modal stiilid */
+  .join-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:12px; }
+  .join-card-title { font-size:11px; color:var(--text3); font-family:'DM Mono',monospace; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px; }
+  .join-card-value { font-size:15px; font-weight:600; color:var(--text); }
+  .join-contract { background:var(--bg); border:1px solid var(--surface2); border-radius:8px; padding:14px; font-size:12px; color:var(--text2); line-height:1.6; max-height:200px; overflow-y:auto; white-space:pre-wrap; margin-bottom:12px; }
+  .join-consent { display:flex; align-items:flex-start; gap:10px; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:8px; margin-bottom:14px; cursor:pointer; }
+  .join-consent input[type=checkbox] { margin-top:2px; flex-shrink:0; width:18px; height:18px; cursor:pointer; accent-color:var(--accent); }
+  .join-consent label { font-size:13px; color:var(--text); cursor:pointer; line-height:1.4; }
+  .join-success { text-align:center; padding:20px 12px; }
+  .join-success-icon { font-size:48px; margin-bottom:12px; }
+  .join-success-title { font-size:20px; font-weight:600; color:var(--accent); margin-bottom:8px; }
+  .join-success-text { font-size:13px; color:var(--text2); line-height:1.5; }
   .footer-sep { color:var(--text3); }
   .footer-left { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   @media(max-width:600px){
@@ -499,6 +511,15 @@
     <div class="mact">
       <button class="btn" onclick="closeMyMatkad()">Sulge</button>
       <button class="btn btn-primary" onclick="closeMyMatkad();openCreateMatk();">⛵ Loo uus matk</button>
+    </div>
+  </div>
+</div>
+
+<!-- MATKAGA LIITUMINE (kliendi vaade, avaneb ?join= URL-iga) -->
+<div class="overlay" id="joinmodal">
+  <div class="modal vmodal">
+    <div id="join-content">
+      <div style="text-align:center;padding:30px;color:var(--text3);">⏳ Laen matka infot...</div>
     </div>
   </div>
 </div>
@@ -2971,12 +2992,15 @@ function renderMyMatkad(){
         <div class="mm-card-status ${isPast?'past':'active'}">${isPast?'Möödas':'Aktiivne'}</div>
       </div>
       <div class="mm-card-link">
-        <span style="font-size:11px;color:var(--text3);">🔗 Jagatav link:</span>
+        <span style="font-size:11px;color:var(--text3);">🔗 Jagatav link klientidele:</span>
         <input type="text" readonly value="${linkUrl}" onclick="this.select()" style="width:100%;padding:6px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;margin-top:3px;"/>
         <div style="display:flex;gap:6px;margin-top:6px;">
           <button class="ibtn" onclick="copyMatkaLink('${linkUrl.replace(/'/g,"\\'")}')">📋 Kopeeri</button>
           <button class="ibtn" onclick="shareMatkaLink('${escapeHtml(m.nimi||'').replace(/'/g,"\\'")}', '${linkUrl.replace(/'/g,"\\'")}')">📤 Jaga</button>
         </div>
+      </div>
+      <div id="osalejad-${m.id}" style="margin-top:8px;">
+        <div style="font-size:11px;color:var(--text3);">⏳ Laen osalejaid...</div>
       </div>
       <div class="mm-card-actions">
         <button class="ibtn" onclick="deleteMatk('${m.id}')" style="color:var(--red);border-color:rgba(220,38,38,0.3);">🗑 Kustuta</button>
@@ -2984,6 +3008,51 @@ function renderMyMatkad(){
     </div>`;
   }
   el.innerHTML=html;
+  // Lae osalejad iga matka jaoks
+  for(const m of myMatkad){
+    loadOsalejad(m.id);
+  }
+}
+
+// Lae matka osalejad ja kuva
+async function loadOsalejad(matkaId){
+  const el=document.getElementById('osalejad-'+matkaId);
+  if(!el||!window.fb)return;
+  try{
+    const fb=window.fb;
+    const snap=await new Promise((resolve,reject)=>{
+      const unsub=fb.onSnapshot(
+        fb.collection(fb.db, 'matkad', matkaId, 'osalejad'),
+        s=>{unsub();resolve(s);}, reject
+      );
+    });
+    if(snap.empty){
+      el.innerHTML='<div style="font-size:11px;color:var(--text3);">👥 Osalejaid: 0</div>';
+      return;
+    }
+    let html=`<div style="font-size:11px;color:var(--text2);margin-bottom:6px;font-weight:600;">👥 Osalejaid: ${snap.size}</div>`;
+    html+='<div style="display:flex;flex-direction:column;gap:5px;">';
+    snap.forEach(doc=>{
+      const d=doc.data();
+      const photo=d.photoURL?`<img src="${escapeHtml(d.photoURL)}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0;" alt=""/>`:
+        `<div style="width:22px;height:22px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:600;flex-shrink:0;">${(d.name||'?').charAt(0).toUpperCase()}</div>`;
+      const joinedAt=d.joinedAt?.toDate?.();
+      const joinedStr=joinedAt?joinedAt.toLocaleDateString('et-EE',{day:'numeric',month:'short'})+' '+joinedAt.toLocaleTimeString('et-EE',{hour:'2-digit',minute:'2-digit'}):'—';
+      html+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface);border:1px solid var(--surface2);border-radius:6px;font-size:12px;">
+        ${photo}
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(d.name||'—')}</div>
+          <div style="color:var(--text3);font-size:10px;font-family:'DM Mono',monospace;">${escapeHtml(d.email||'—')} · Liitus: ${joinedStr}</div>
+        </div>
+        <div style="color:var(--green);font-size:11px;flex-shrink:0;">✓ Nõus</div>
+      </div>`;
+    });
+    html+='</div>';
+    el.innerHTML=html;
+  }catch(err){
+    console.warn('Osalejate laadimine ebaõnnestus:', err);
+    el.innerHTML='<div style="font-size:11px;color:var(--text3);">⚠️ Osalejaid ei laetud</div>';
+  }
 }
 
 // Kopeeri matka link
@@ -3429,7 +3498,188 @@ document.addEventListener('keydown', (e)=>{
   }
 });
 
+// =============== MATKAGA LIITUMINE ===============
+
+let activeJoinMatka=null; // Praegu vaadeldav matk (liitumise vaates)
+
+// Kontrolli URL-ist, kas on ?join= parameeter
+function checkJoinCode(){
+  const params=new URLSearchParams(window.location.search);
+  const code=params.get('join');
+  if(code&&code.length>0){
+    openJoinModal(code.toUpperCase().trim());
+    return true;
+  }
+  return false;
+}
+
+// Ava liitumise modal konkreetse koodiga
+async function openJoinModal(code){
+  document.getElementById('joinmodal').classList.add('open');
+  document.getElementById('join-content').innerHTML='<div style="text-align:center;padding:30px;color:var(--text3);">⏳ Laen matka infot...</div>';
+  if(!window.fb){
+    // Firebase pole veel laetud, oota natuke
+    setTimeout(()=>openJoinModal(code), 800);
+    return;
+  }
+  try{
+    const fb=window.fb;
+    // Otsi matka join-koodi järgi
+    const q=fb.query(
+      fb.collection(fb.db, 'matkad'),
+      fb.where('joinCode', '==', code)
+    );
+    const snap=await new Promise((resolve,reject)=>{
+      const unsub=fb.onSnapshot(q, s=>{unsub();resolve(s);}, reject);
+    });
+    if(snap.empty){
+      renderJoinError('Matka ei leitud. Kontrolli, kas link on õige.');
+      return;
+    }
+    const doc=snap.docs[0];
+    activeJoinMatka={id:doc.id, ...doc.data(), algusAeg:doc.data().algusAeg?.toDate?.()};
+    renderJoinForm();
+  }catch(err){
+    console.error('Matka laadimine ebaõnnestus:', err);
+    renderJoinError('Matka laadimine ebaõnnestus. Proovi uuesti.');
+  }
+}
+
+function closeJoinModal(){
+  document.getElementById('joinmodal').classList.remove('open');
+  activeJoinMatka=null;
+  // Eemalda ?join= URL-ist
+  const url=new URL(window.location.href);
+  url.searchParams.delete('join');
+  window.history.replaceState({}, '', url);
+}
+
+function renderJoinError(msg){
+  document.getElementById('join-content').innerHTML=`
+    <div class="modal-title">⛵ Matkaga liitumine</div>
+    <div style="padding:20px;text-align:center;color:var(--red);font-size:14px;">⚠️ ${escapeHtml(msg)}</div>
+    <div class="mact"><button class="btn btn-primary" onclick="closeJoinModal()">Sulge</button></div>`;
+}
+
+function renderJoinForm(){
+  const m=activeJoinMatka;
+  if(!m)return;
+  const el=document.getElementById('join-content');
+  // Kuupäev formaat
+  const dateStr=m.algusAeg?m.algusAeg.toLocaleString('et-EE',{
+    day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'
+  }):'—';
+  let html=`<div class="modal-title">⛵ Liitu matkaga</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Loe matka info läbi ja kinnita osalemine.</div>
+    <div class="join-card">
+      <div class="join-card-title">Matk</div>
+      <div class="join-card-value">${escapeHtml(m.nimi||m.title||'—')}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div class="join-card">
+        <div class="join-card-title">Jõgi</div>
+        <div class="join-card-value">${escapeHtml(m.jogi||'—')}</div>
+      </div>
+      <div class="join-card">
+        <div class="join-card-title">Lõik</div>
+        <div class="join-card-value">${escapeHtml(m.loik||'—')}</div>
+      </div>
+      <div class="join-card">
+        <div class="join-card-title">Kuupäev</div>
+        <div class="join-card-value">${escapeHtml(dateStr)}</div>
+      </div>
+      <div class="join-card">
+        <div class="join-card-title">Matkajuht</div>
+        <div class="join-card-value">${escapeHtml(m.guideName||'—')}</div>
+      </div>
+    </div>
+    ${m.hind?`<div class="join-card" style="margin-bottom:12px;"><div class="join-card-title">Hind / Info</div><div style="font-size:13px;color:var(--text2);">${escapeHtml(m.hind)}</div></div>`:''}
+    ${m.markused?`<div class="join-card" style="margin-bottom:12px;"><div class="join-card-title">Märkused</div><div style="font-size:13px;color:var(--text2);">${escapeHtml(m.markused)}</div></div>`:''}`;
+
+  // Lepingu tekst
+  if(m.lepinguTekst){
+    html+=`<div style="margin-bottom:8px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;">📄 Omavastutuse leping</div>
+      <div class="join-contract">${escapeHtml(m.lepinguTekst)}</div>
+    </div>`;
+  }
+
+  // Nõusolek + Liitu nupp
+  if(!currentUser){
+    html+=`<div style="text-align:center;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:14px;">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Liitumiseks pead olema sisse logitud</p>
+      <button class="btn btn-primary" onclick="closeJoinModal();doLogin();">🔐 Logi sisse Google'iga</button>
+    </div>`;
+    html+=`<div class="mact"><button class="btn" onclick="closeJoinModal()">Tühista</button></div>`;
+  } else {
+    html+=`<div class="join-consent" onclick="document.getElementById('join-cb').click()">
+      <input type="checkbox" id="join-cb"/>
+      <label for="join-cb">Olen matka info ja lepingu teksti läbi lugenud ning nõustun osalema omal vastutusel. Annan nõusoleku oma nime ja e-posti hoidmiseks seoses selle matka korraldamisega.</label>
+    </div>
+    <div class="mact">
+      <button class="btn" onclick="closeJoinModal()">Tühista</button>
+      <button class="btn btn-primary" id="join-submit-btn" onclick="submitJoin()">✅ Liitu matkaga</button>
+    </div>`;
+  }
+  el.innerHTML=html;
+}
+
+// Kinnita liitumine
+async function submitJoin(){
+  if(!currentUser){alert('Logi kõigepealt sisse');return;}
+  const cb=document.getElementById('join-cb');
+  if(!cb||!cb.checked){
+    alert('Pead kõigepealt lepinguga nõustuma (märgi linnuke)');
+    return;
+  }
+  const m=activeJoinMatka;
+  if(!m||!window.fb)return;
+  const btn=document.getElementById('join-submit-btn');
+  if(btn){btn.disabled=true;btn.textContent='Liitun...';}
+  try{
+    const fb=window.fb;
+    // Salvesta osaleja
+    await fb.setDoc(
+      fb.doc(fb.db, 'matkad', m.id, 'osalejad', currentUser.uid),
+      {
+        uid: currentUser.uid,
+        name: currentUser.displayName||currentUser.email||'Kasutaja',
+        email: currentUser.email||'',
+        photoURL: currentUser.photoURL||null,
+        consent: true,
+        consentAt: fb.serverTimestamp(),
+        consentIp: null, // IP serveripoolselt ei ole võimalik brauseris
+        matkaId: m.id,
+        matkaNimi: m.nimi||m.title||'',
+        joinedAt: fb.serverTimestamp(),
+        trackingActive: false
+      }
+    );
+    // Näita edu-teadet
+    document.getElementById('join-content').innerHTML=`
+      <div class="join-success">
+        <div class="join-success-icon">🎉</div>
+        <div class="join-success-title">Liitumine õnnestus!</div>
+        <div class="join-success-text">
+          Oled edukalt liitunud matkaga <b>${escapeHtml(m.nimi||m.title||'')}</b>.<br><br>
+          Matkajuht <b>${escapeHtml(m.guideName||'')}</b> näeb, et oled liitunud.<br><br>
+          Matka ajal saad jagada oma asukohta matkajuhile.<br>
+          <span style="color:var(--text3);font-size:11px;">Nõusolek registreeriti: ${new Date().toLocaleString('et-EE')}</span>
+        </div>
+        <div class="mact" style="justify-content:center;margin-top:16px;">
+          <button class="btn btn-primary" onclick="closeJoinModal()">Sulge</button>
+        </div>
+      </div>`;
+  }catch(err){
+    console.error('Liitumine ebaõnnestus:', err);
+    alert('Liitumine ebaõnnestus: '+(err.message||err.code));
+    if(btn){btn.disabled=false;btn.textContent='✅ Liitu matkaga';}
+  }
+}
+
 async function init(){
+  // Kontrolli, kas URL sisaldab ?join= parameetrit (matka liitumine)
+  checkJoinCode();
   // 1) Laadi vaikimisi nimekiri Sheetsist (jookseb paralleelselt veetasemete laadimisega)
   // 2) Laadi veetasemed
   document.getElementById('stxt').textContent='Laen vaikimisi nimekirja ja veetasemeid...';

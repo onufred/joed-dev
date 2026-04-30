@@ -166,6 +166,13 @@
   .vp-tab.user-loik.active { background: linear-gradient(135deg, #f59e0b, #d97706); color:#fff; border-color:#d97706; }
   .vp-tab-add { background: rgba(45,90,61,0.08); color:var(--accent); font-weight:600; border:1px dashed var(--accent); }
   .vp-tab-add:hover { background: rgba(45,90,61,0.15); }
+  /* Loo lõik modal */
+  .cl-mode-bar { display:flex; gap:6px; margin-bottom:8px; background:var(--bg); padding:3px; border-radius:8px; }
+  .cl-mode-btn { flex:1; padding:8px; font-size:12px; font-weight:500; border:none; background:transparent; color:var(--text2); cursor:pointer; border-radius:6px; font-family:'DM Sans',sans-serif; }
+  .cl-mode-btn.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+  .cl-mode-btn:hover:not(.active) { color:var(--text); }
+  .cl-coords { display:flex; flex-direction:column; gap:3px; margin-top:6px; padding:8px 10px; background:var(--bg); border-radius:6px; font-size:11px; font-family:'DM Mono',monospace; }
+  .cl-coord-row { color:var(--text); }
   .vp-tab.active { background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.1); }
   .vp-loik-info { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
   .vp-info-pill { font-size:11px; padding:4px 9px; border-radius:7px; background:var(--bg); color:var(--text2); border:1px solid var(--surface2); display:inline-flex; align-items:center; gap:5px; font-family:'DM Mono',monospace; }
@@ -436,19 +443,32 @@
 </div>
 
 <div class="overlay" id="clmodal">
-  <div class="modal">
+  <div class="modal vmodal">
     <div class="modal-title">⭐ Loo oma jõe lõik</div>
     <p style="font-size:11px;color:var(--text3);margin-bottom:12px;">Sinu lõik on privaatne — näed seda ainult sina selle kontoga.</p>
     <div class="mrow"><label>Jõe nimi *</label><input id="cl-jogi" type="text" placeholder="nt Pärnu, Avijõgi"/></div>
     <div class="mrow"><label>Lõigu nimi *</label><input id="cl-nimi" type="text" placeholder="nt Kallaste – Kavastu"/></div>
     <div class="mgrid">
-      <div class="mrow"><label>Pikkus (km)</label><input id="cl-pikkus" type="number" step="0.1" placeholder="12"/></div>
+      <div class="mrow"><label>Pikkus (km)</label><input id="cl-pikkus" type="number" step="0.1" placeholder="auto"/></div>
       <div class="mrow"><label>Raskus</label><input id="cl-raskus" type="text" placeholder="nt Algajale / WW1"/></div>
     </div>
-    <div class="mrow"><label>Algus koordinaadid (lat, lng)</label><input id="cl-algus" type="text" placeholder="58.5234, 25.9876"/></div>
-    <div class="mrow"><label>Lõpu koordinaadid (lat, lng)</label><input id="cl-lopp" type="text" placeholder="58.5500, 26.0123"/></div>
+    <div style="margin:10px 0;">
+      <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:6px;">Punktid kaardile *</label>
+      <div class="cl-mode-bar">
+        <button id="cl-mode-algus" class="cl-mode-btn active" onclick="setClMode('algus')">🅰️ Vali algus</button>
+        <button id="cl-mode-lopp" class="cl-mode-btn" onclick="setClMode('lopp')">🅱️ Vali lõpp</button>
+      </div>
+      <p style="font-size:11px;color:var(--text3);margin:0 0 6px;" id="cl-status">Klõpsa kaardile, kus on lõigu algus.</p>
+      <div style="position:relative;">
+        <div id="cl-map" style="height:300px;border-radius:8px;border:1px solid var(--border);z-index:1;"></div>
+        <button type="button" onclick="clCenterOnMe()" style="position:absolute;top:10px;right:10px;z-index:1000;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:11px;font-weight:500;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.15);font-family:'DM Sans',sans-serif;color:var(--text);">📍 Mu asukoht</button>
+      </div>
+      <div class="cl-coords" id="cl-coords-display">
+        <span class="cl-coord-row" id="cl-coord-algus">🅰️ Algus: <span style="color:var(--text3);">vali kaardilt</span></span>
+        <span class="cl-coord-row" id="cl-coord-lopp">🅱️ Lõpp: <span style="color:var(--text3);">vali kaardilt</span></span>
+      </div>
+    </div>
     <div class="mrow"><label>Märkused</label><textarea id="cl-markused" rows="3" placeholder="Mida peaks teadma sõitmisest? Kärestikud, takistused, parkimine..." style="width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;"></textarea></div>
-    <p style="font-size:10px;color:var(--text3);margin-top:8px;">💡 <b>Vihje:</b> Koordinaate saad <a href="https://www.google.com/maps" target="_blank" style="color:var(--accent);">Google Maps'ist</a> — paremklikk kohale → kuvatakse lat/lng. Kopeeri "58.5234, 25.9876" kujul.</p>
     <div class="mact">
       <button class="btn" onclick="closeCreateLoik()">Tühista</button>
       <button class="btn btn-primary" onclick="submitCreateLoik()">💾 Salvesta</button>
@@ -2519,6 +2539,10 @@ function getAllLoiguad(jogi){
   return [...publicLoigud, ...myLoigud];
 }
 
+// Loo-lõik kaardi muutujad
+let clMap=null, clMode='algus', clAlgusMarker=null, clLoppMarker=null;
+let clAlgus=null, clLopp=null, clRouteLine=null;
+
 // Avab vormi uue kasutaja lõigu loomiseks
 function openCreateLoik(jogi){
   if(!canCreateLoik()){
@@ -2530,13 +2554,159 @@ function openCreateLoik(jogi){
   document.getElementById('cl-pikkus').value='';
   document.getElementById('cl-raskus').value='';
   document.getElementById('cl-markused').value='';
-  document.getElementById('cl-algus').value='';
-  document.getElementById('cl-lopp').value='';
+  // Reset koordinaadid
+  clAlgus=null;
+  clLopp=null;
+  clMode='algus';
+  updateClStatus();
+  updateClCoordsDisplay();
   document.getElementById('clmodal').classList.add('open');
+  // Init kaart pärast modal avamist
+  setTimeout(()=>initClMap(jogi), 80);
 }
 
 function closeCreateLoik(){
   document.getElementById('clmodal').classList.remove('open');
+  if(clMap){
+    clMap.remove();
+    clMap=null;
+  }
+  clAlgusMarker=null;
+  clLoppMarker=null;
+  clRouteLine=null;
+  clAlgus=null;
+  clLopp=null;
+}
+
+// Init Leaflet kaart loomise modali jaoks
+function initClMap(jogi){
+  if(clMap){clMap.remove();clMap=null;}
+  const mapEl=document.getElementById('cl-map');
+  if(!mapEl)return;
+  // Vaikimisi keskpaik - proovime leida sama jõe avalik lõik
+  let center=[58.5, 25.5]; // Eesti
+  let zoom=8;
+  // Kui sellele jõele on juba lõik, kasuta seda keskmena
+  const existing=getAllLoiguad(jogi).filter(l=>l.algus);
+  if(existing.length>0&&existing[0].algus){
+    center=existing[0].algus;
+    zoom=11;
+  }
+  clMap=L.map('cl-map').setView(center, zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 18
+  }).addTo(clMap);
+  // Klõpsuhaldur
+  clMap.on('click', (e)=>{
+    const ll=[e.latlng.lat, e.latlng.lng];
+    if(clMode==='algus'){
+      clAlgus=ll;
+      if(clAlgusMarker)clMap.removeLayer(clAlgusMarker);
+      clAlgusMarker=L.marker(ll, {icon:makeMapIcon('🅰️','#2d5a3d'), draggable:true}).addTo(clMap);
+      clAlgusMarker.on('dragend', (ev)=>{
+        const p=ev.target.getLatLng();
+        clAlgus=[p.lat, p.lng];
+        updateClCoordsDisplay();
+        updateClRoute();
+      });
+      // Lülitume automaatselt lõpu valikule
+      if(!clLopp){
+        setClMode('lopp');
+      }
+    } else {
+      clLopp=ll;
+      if(clLoppMarker)clMap.removeLayer(clLoppMarker);
+      clLoppMarker=L.marker(ll, {icon:makeMapIcon('🅱️','#8b1a1a'), draggable:true}).addTo(clMap);
+      clLoppMarker.on('dragend', (ev)=>{
+        const p=ev.target.getLatLng();
+        clLopp=[p.lat, p.lng];
+        updateClCoordsDisplay();
+        updateClRoute();
+      });
+    }
+    updateClCoordsDisplay();
+    updateClRoute();
+  });
+}
+
+// Vaheta režiimi (algus / lõpp valik)
+function setClMode(mode){
+  clMode=mode;
+  document.getElementById('cl-mode-algus').classList.toggle('active', mode==='algus');
+  document.getElementById('cl-mode-lopp').classList.toggle('active', mode==='lopp');
+  updateClStatus();
+}
+
+function updateClStatus(){
+  const el=document.getElementById('cl-status');
+  if(!el)return;
+  if(clMode==='algus'){
+    el.textContent=clAlgus?'Klõpsa kaardile, kus on uus algus, või lohista 🅰️ markerit.':'Klõpsa kaardile, kus on lõigu algus.';
+  } else {
+    el.textContent=clLopp?'Klõpsa kaardile, kus on uus lõpp, või lohista 🅱️ markerit.':'Klõpsa kaardile, kus on lõigu lõpp.';
+  }
+}
+
+function updateClCoordsDisplay(){
+  const aEl=document.getElementById('cl-coord-algus');
+  const lEl=document.getElementById('cl-coord-lopp');
+  if(aEl){
+    aEl.innerHTML=clAlgus?
+      `🅰️ Algus: <span style="color:var(--accent);">${clAlgus[0].toFixed(5)}, ${clAlgus[1].toFixed(5)}</span>`:
+      '🅰️ Algus: <span style="color:var(--text3);">vali kaardilt</span>';
+  }
+  if(lEl){
+    lEl.innerHTML=clLopp?
+      `🅱️ Lõpp: <span style="color:var(--accent);">${clLopp[0].toFixed(5)}, ${clLopp[1].toFixed(5)}</span>`:
+      '🅱️ Lõpp: <span style="color:var(--text3);">vali kaardilt</span>';
+  }
+  updateClStatus();
+}
+
+// Joonista BRouter joon kahe punkti vahel + arvuta pikkus
+async function updateClRoute(){
+  if(clRouteLine&&clMap){
+    clMap.removeLayer(clRouteLine);
+    clRouteLine=null;
+  }
+  if(!clAlgus||!clLopp||!clMap)return;
+  // Esmalt sirgjoon
+  clRouteLine=L.polyline([clAlgus, clLopp], {color:'#2d5a3d', weight:3, opacity:0.4, dashArray:'8,6'}).addTo(clMap);
+  // BRouter
+  try{
+    const latlngs=await fetchRiverRoute(clAlgus, clLopp);
+    if(!latlngs||!clMap)return;
+    if(clRouteLine){clMap.removeLayer(clRouteLine);}
+    clRouteLine=L.polyline(latlngs, {color:'#2d5a3d', weight:4, opacity:0.85}).addTo(clMap);
+    // Arvuta pikkus ja täida vorm
+    const meters=routeLengthFrom(latlngs, 0);
+    const km=(meters/1000).toFixed(1);
+    const pikkusInput=document.getElementById('cl-pikkus');
+    if(pikkusInput&&!pikkusInput.value){
+      pikkusInput.value=km;
+      pikkusInput.placeholder=km+' km (auto-arvutatud)';
+    }
+  }catch(e){
+    console.warn('BRouter ebaõnnestus:', e);
+  }
+}
+
+// "Mu asukoht" - tsentreeri kaart kasutaja GPS-ile
+function clCenterOnMe(){
+  if(!navigator.geolocation){alert('GPS pole saadaval');return;}
+  navigator.geolocation.getCurrentPosition(
+    (pos)=>{
+      if(clMap)clMap.setView([pos.coords.latitude, pos.coords.longitude], 14);
+    },
+    (err)=>{
+      let msg='Asukoha leidmine ebaõnnestus.';
+      if(err.code===1)msg='Andsid loaks "Keela" — luba brauseri seadetes asukoha jagamine.';
+      else if(err.code===2)msg='GPS-signaal pole saadaval.';
+      alert(msg);
+    },
+    {enableHighAccuracy:true, timeout:10000}
+  );
 }
 
 async function submitCreateLoik(){
@@ -2545,20 +2715,14 @@ async function submitCreateLoik(){
   const pikkus=parseFloat(document.getElementById('cl-pikkus').value);
   const raskus=document.getElementById('cl-raskus').value.trim();
   const markused=document.getElementById('cl-markused').value.trim();
-  const algusStr=document.getElementById('cl-algus').value.trim();
-  const loppStr=document.getElementById('cl-lopp').value.trim();
   if(!jogi){alert('Sisesta jõe nimi');return;}
   if(!nimi){alert('Sisesta lõigu nimi');return;}
-  // Parsi koordinaadid
-  const algus=parseCoords(algusStr);
-  const lopp=parseCoords(loppStr);
-  if(!algus){alert('Sisesta kehtivad algus-koordinaadid (lat, lng)');return;}
-  if(!lopp){alert('Sisesta kehtivad lõpu-koordinaadid (lat, lng)');return;}
-  const data={jogi, nimi, algus, lopp, pikkus:isNaN(pikkus)?null:pikkus, raskus, markused};
+  if(!clAlgus){alert('Vali kaardilt lõigu algus (klõpsa "🅰️ Vali algus" ja siis kaardile)');return;}
+  if(!clLopp){alert('Vali kaardilt lõigu lõpp (klõpsa "🅱️ Vali lõpp" ja siis kaardile)');return;}
+  const data={jogi, nimi, algus:clAlgus, lopp:clLopp, pikkus:isNaN(pikkus)?null:pikkus, raskus, markused};
   const id=await saveUserLoik(data);
   if(id){
     closeCreateLoik();
-    // Ava kohe Veepeale see jõgi (et näha uus lõik)
     setTimeout(()=>openV(jogi), 200);
   }
 }

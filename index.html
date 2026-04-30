@@ -361,6 +361,31 @@
   <div class="grid" id="grid"></div>
 </main>
 
+<!-- KLIENDI TRACKING INFO PANEEL (püsiv, aktiivse GPS jagamise ajal) -->
+<div id="client-tracking-bar" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9000;background:rgba(26,27,22,0.96);backdrop-filter:blur(8px);padding:10px 16px;border-top:2px solid var(--accent);">
+  <div style="max-width:600px;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
+      <span style="width:10px;height:10px;background:#22c55e;border-radius:50%;flex-shrink:0;animation:gpspulse 2s ease-out infinite;"></span>
+      <span id="ctb-trip-name" style="font-size:12px;color:#a3c4aa;font-family:'DM Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Jagan asukohta...</span>
+    </div>
+    <div style="display:flex;gap:16px;flex-shrink:0;">
+      <div style="text-align:center;">
+        <div style="font-size:9px;color:#6b9a70;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;">Kiirus</div>
+        <div id="ctb-speed" style="font-size:16px;font-weight:700;color:#fff;font-family:'DM Mono',monospace;">—</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:9px;color:#6b9a70;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;">Lõpuni</div>
+        <div id="ctb-dist" style="font-size:16px;font-weight:700;color:#fff;font-family:'DM Mono',monospace;">—</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:9px;color:#6b9a70;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;">ETA</div>
+        <div id="ctb-eta" style="font-size:16px;font-weight:700;color:#fff;font-family:'DM Mono',monospace;">—</div>
+      </div>
+    </div>
+    <button onclick="stopClientTrackingFromBar()" style="background:rgba(220,38,38,0.3);border:1px solid rgba(220,38,38,0.5);color:#fca5a5;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif;flex-shrink:0;">■ Peata</button>
+  </div>
+</div>
+
 <footer class="app-footer">
   <div class="footer-left">
     <span>© <a href="https://veeretked.ee" target="_blank">veeretked.ee</a></span>
@@ -3815,11 +3840,41 @@ let clientTrackingMatkaId=null;
 let clientTrackingWatchId=null;
 let clientTrackingInterval=null;
 let clientLastPos=null;
+let clientTrackingHistory=[]; // GPS ajalugu kiiruse arvutamiseks
+let clientTrackingEndPoint=null; // Lõpp-punkt (lat, lng)
+let clientTrackingMatkaNimi='';
+
+// Leia matka lõigu lõpp-punkt
+function findMatkaEndPoint(m){
+  if(!m)return null;
+  const jogi=String(m.jogi||'').toLowerCase();
+  const loikNimi=String(m.loik||'').toLowerCase();
+  // 1) Otsi avalikest lõikudest
+  if(loigud&&loigud.length>0){
+    // Täpne nimi
+    let l=loigud.find(l=>
+      String(l.jogi||'').toLowerCase()===jogi &&
+      String(l.nimi||'').toLowerCase()===loikNimi
+    );
+    // Ligikaudne — sama jõgi, esimene lõik
+    if(!l&&jogi)l=loigud.find(l=>String(l.jogi||'').toLowerCase()===jogi);
+    if(l&&l.lopp)return l.lopp; // [lat, lng]
+  }
+  // 2) Otsi kasutaja lõikudest
+  if(userLoigud&&userLoigud.length>0){
+    let l=userLoigud.find(l=>
+      String(l.jogi||'').toLowerCase()===jogi &&
+      String(l.nimi||'').toLowerCase()===loikNimi
+    );
+    if(!l&&jogi)l=userLoigud.find(l=>String(l.jogi||'').toLowerCase()===jogi);
+    if(l&&l.lopp)return l.lopp;
+  }
+  return null;
+}
 
 async function toggleClientTracking(matkaId, matkaNimi){
   const btn=document.getElementById('client-gps-btn');
   if(clientTrackingWatchId!==null){
-    // Lülita välja
     stopClientTracking(matkaId);
     if(btn){
       btn.style.background='var(--accent)';
@@ -3827,17 +3882,28 @@ async function toggleClientTracking(matkaId, matkaNimi){
     }
     return;
   }
-  // Lülita sisse
-  if(!navigator.geolocation){
-    alert('Sinu seade ei toeta GPS-i');
-    return;
-  }
+  if(!navigator.geolocation){alert('Sinu seade ei toeta GPS-i');return;}
   if(btn){btn.textContent='⏳ Otsin asukohta...';}
+  // Salvesta matka nimi
+  clientTrackingMatkaNimi=matkaNimi||'Matk';
+  // Leia lõpp-punkt (matka lõigu järgi)
+  if(window.fb){
+    try{
+      const fb=window.fb;
+      const snap=await new Promise((resolve,reject)=>{
+        const unsub=fb.onSnapshot(fb.doc(fb.db,'matkad',matkaId),s=>{unsub();resolve(s);},reject);
+      });
+      if(snap.exists()){
+        clientTrackingEndPoint=findMatkaEndPoint(snap.data());
+      }
+    }catch(e){console.warn('Matka lõpp-punkti laadimine ebaõnnestus:', e);}
+  }
+  // GPS käivitus
   navigator.geolocation.getCurrentPosition(
     async (pos)=>{
       clientTrackingMatkaId=matkaId;
+      clientTrackingHistory=[];
       await sendClientLocation(matkaId, pos);
-      // Pidev update iga 30 sek
       clientTrackingWatchId=navigator.geolocation.watchPosition(
         pos=>sendClientLocation(matkaId, pos),
         err=>console.warn('GPS viga:', err),
@@ -3847,6 +3913,8 @@ async function toggleClientTracking(matkaId, matkaNimi){
         btn.style.background='#dc2626';
         btn.textContent='🔴 Peata asukoha jagamine';
       }
+      // Näita tracking info bari
+      showClientTrackingBar(matkaId, matkaNimi);
     },
     (err)=>{
       if(btn){btn.textContent='📍 Lülita asukoha jagamine sisse';}
@@ -3863,7 +3931,19 @@ async function sendClientLocation(matkaId, pos){
   const lat=pos.coords.latitude;
   const lng=pos.coords.longitude;
   const acc=pos.coords.accuracy||50;
+  const ts=pos.timestamp||Date.now();
   clientLastPos={lat, lng, acc};
+
+  // Lisa ajalukku (täpsus < 80m ja liikunud > 3m eelmisest)
+  if(acc<80){
+    const last=clientTrackingHistory[clientTrackingHistory.length-1];
+    if(!last||haversine([lat,lng],[last.lat,last.lng])>3){
+      clientTrackingHistory.push({lat,lng,ts,acc});
+      if(clientTrackingHistory.length>60)clientTrackingHistory.shift();
+    }
+  }
+
+  // Saada Firestore'i
   try{
     const fb=window.fb;
     await fb.setDoc(
@@ -3880,6 +3960,99 @@ async function sendClientLocation(matkaId, pos){
   }catch(err){
     console.warn('Asukoha saatmine ebaõnnestus:', err);
   }
+
+  // Uuenda info bari
+  updateClientTrackingBar(lat, lng);
+}
+
+// Uuenda tracking bari kiirus + ETA
+function updateClientTrackingBar(lat, lng){
+  // Kiirus
+  let avgKmh=null;
+  if(clientTrackingHistory.length>=3){
+    let totalKm=0, totalSec=0;
+    for(let i=1;i<clientTrackingHistory.length;i++){
+      const a=clientTrackingHistory[i-1], b=clientTrackingHistory[i];
+      totalKm+=haversine([a.lat,a.lng],[b.lat,b.lng])/1000;
+      totalSec+=(b.ts-a.ts)/1000;
+    }
+    if(totalSec>10&&totalKm>0.005){
+      avgKmh=(totalKm/totalSec)*3600;
+      // Ainult mõistlik aerutamise kiirus (0.5 - 15 km/h)
+      if(avgKmh<0.5||avgKmh>15)avgKmh=null;
+    }
+  }
+
+  // Distants lõpuni (mööda jõge kui BRouter joon on cache'is, muidu linnulennult)
+  let distKm=null;
+  let etaTekst='—';
+  if(clientTrackingEndPoint){
+    const endPt=clientTrackingEndPoint;
+    // Proovi BRouter cache-st
+    const cacheKey=`${endPt[0]},${endPt[1]}`;
+    let routeFound=false;
+    // Otsi routeCache-st lõpp-punktile lähedast marsruuti
+    for(const key in routeCache){
+      const latlngs=routeCache[key];
+      if(!latlngs||latlngs.length<2)continue;
+      const lastPt=latlngs[latlngs.length-1];
+      if(haversine(lastPt, endPt)<500){ // Lõpp-punkt on <500m marsruudi lõpust
+        const idx=nearestRouteIdx([lat,lng], latlngs);
+        if(idx>=0){
+          distKm=routeLengthFrom(latlngs, idx)/1000;
+          routeFound=true;
+          break;
+        }
+      }
+    }
+    // Kui marsruuti pole cache'is, kasuta linnulennult
+    if(!routeFound){
+      distKm=haversine([lat,lng], endPt)/1000;
+    }
+  }
+
+  // ETA
+  if(distKm!==null&&avgKmh!==null&&avgKmh>0.3){
+    const min=Math.round((distKm/avgKmh)*60);
+    etaTekst=min<60?min+' min':(Math.floor(min/60)+'h '+(min%60)+'min');
+  } else if(distKm!==null){
+    etaTekst='kogub andmeid';
+  }
+
+  // Kuva
+  const speedEl=document.getElementById('ctb-speed');
+  const distEl=document.getElementById('ctb-dist');
+  const etaEl=document.getElementById('ctb-eta');
+  if(speedEl)speedEl.textContent=avgKmh!==null?(avgKmh.toFixed(1)+' km/h'):'—';
+  if(distEl)distEl.textContent=distKm!==null?(distKm<1?(Math.round(distKm*1000)+'m'):(distKm.toFixed(1)+' km')):'—';
+  if(etaEl)etaEl.textContent=etaTekst;
+}
+
+// Näita tracking bari
+function showClientTrackingBar(matkaId, matkaNimi){
+  const bar=document.getElementById('client-tracking-bar');
+  const nameEl=document.getElementById('ctb-trip-name');
+  if(bar)bar.style.display='block';
+  if(nameEl)nameEl.textContent='🚣 '+matkaNimi;
+  // Keri leht üles et bar ei kataks sisu
+  document.body.style.paddingBottom='64px';
+}
+
+function hideClientTrackingBar(){
+  const bar=document.getElementById('client-tracking-bar');
+  if(bar)bar.style.display='none';
+  document.body.style.paddingBottom='0';
+}
+
+// "Peata" nupp barist
+function stopClientTrackingFromBar(){
+  stopClientTracking(clientTrackingMatkaId);
+  // Uuenda ka avatud liitumiste modali nupp kui lahti
+  const btn=document.getElementById('client-gps-btn');
+  if(btn){
+    btn.style.background='var(--accent)';
+    btn.textContent='📍 Lülita asukoha jagamine sisse';
+  }
 }
 
 async function stopClientTracking(matkaId){
@@ -3887,7 +4060,6 @@ async function stopClientTracking(matkaId){
     navigator.geolocation.clearWatch(clientTrackingWatchId);
     clientTrackingWatchId=null;
   }
-  // Märgi kasutaja inaktiivseks
   if(matkaId&&currentUser&&window.fb){
     try{
       const fb=window.fb;
@@ -3900,6 +4072,10 @@ async function stopClientTracking(matkaId){
   }
   clientTrackingMatkaId=null;
   clientLastPos=null;
+  clientTrackingHistory=[];
+  clientTrackingEndPoint=null;
+  clientTrackingMatkaNimi='';
+  hideClientTrackingBar();
 }
 
 let activeJoinMatka=null; // Praegu vaadeldav matk (liitumise vaates)

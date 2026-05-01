@@ -404,8 +404,10 @@
         <button class="user-menu-item" onclick="openMyMatkad();toggleUserMenu();">⛵ Mu matkad</button>
         <button class="user-menu-item" onclick="openMyJoined();toggleUserMenu();">🚣 Mu liitumised</button>
         <button class="user-menu-item" onclick="openStats();toggleUserMenu();">📊 Minu statistika</button>
+        <button class="user-menu-item" id="reklaam-menu-btn" style="display:none;" onclick="openLRModal();toggleUserMenu();">📣 Lõigu reklaam</button>
         <button class="user-menu-item" onclick="openFeedback();toggleUserMenu();">💬 Tagasiside</button>
         <div style="border-top:1px solid var(--border);margin:4px 0;"></div>
+        <button class="user-menu-item" onclick="openPricing();toggleUserMenu();">💳 Paketid ja hinnad</button>
         <button class="user-menu-item" onclick="exportSettings();toggleUserMenu();">📤 Ekspordi seaded</button>
         <button class="user-menu-item" onclick="resetDefaults();toggleUserMenu();">🔄 Lähtesta nimekiri</button>
         <div style="border-top:1px solid var(--border);margin:4px 0;"></div>
@@ -703,6 +705,112 @@
 
 <!-- VARUSTUSE MALLID -->
 <div class="overlay" id="varustusmallidmodal">
+
+<!-- HINNASTUS MODAL -->
+<div class="overlay" id="pricingmodal">
+  <div class="modal" style="width:480px;max-width:96vw;">
+    <div style="text-align:center;margin-bottom:18px;">
+      <div style="font-size:28px;margin-bottom:6px;">🚣</div>
+      <div style="font-size:20px;font-weight:700;letter-spacing:-0.4px;">Vali oma pakett</div>
+      <div style="font-size:13px;color:var(--text3);margin-top:4px;">Tühista igal ajal. Ilma lepinguta.</div>
+    </div>
+    <!-- Toggle kuu/aasta -->
+    <div id="pricing-toggle" style="display:flex;justify-content:center;margin-bottom:20px;">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:3px;display:flex;gap:2px;">
+        <button id="ptog-kuu" onclick="setPricingPeriod('kuu')" style="padding:6px 18px;border-radius:16px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;background:var(--accent);color:#fff;transition:all .15s;">Kuumakse</button>
+        <button id="ptog-aasta" onclick="setPricingPeriod('aasta')" style="padding:6px 18px;border-radius:16px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;background:transparent;color:var(--text2);transition:all .15s;">Aastamakse <span style="font-size:10px;color:var(--green);font-weight:700;">-33%</span></button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;" id="pricing-cards">
+      <!-- Kaardid renderdatakse JS-iga -->
+    </div>
+    <div style="text-align:center;margin-top:14px;font-size:11px;color:var(--text3);">
+      🔒 Turvaline makse Stripe kaudu · Kaardimakse · EL kaardid
+    </div>
+    <div class="mact" style="justify-content:center;margin-top:12px;">
+      <button class="btn" onclick="closePricing()">Sulge</button>
+    </div>
+  </div>
+</div>
+
+<!-- LÕIGU REKLAAM HALDAMINE (matkajuhile) -->
+<div class="overlay" id="loikreklaommodal">
+
+<!-- MATKA JÄRELRAPORT -->
+<div class="overlay" id="jarelraportmodal">
+  <div class="modal vmodal" style="max-width:560px;">
+    <div class="modal-title">📋 Matka järelraport</div>
+    <div id="jarelraport-content">
+      <div style="text-align:center;padding:20px;color:var(--text3);">⏳ Laen...</div>
+    </div>
+    <div class="mact">
+      <button class="btn btn-primary" onclick="closeJarelRaport()">Sulge</button>
+    </div>
+  </div>
+</div>
+
+<!-- RISKIANALÜÜS -->
+<div class="overlay" id="riskimodal">
+  <div class="modal vmodal" style="max-width:540px;">
+    <div class="modal-title">⚠️ Riskianalüüs</div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.5;">Hinda matka riske enne algust. Skoor 1–10, kus 10 tähendab väga kõrget riski.</p>
+    <div id="riski-content"></div>
+    <div class="mact">
+      <button class="btn" onclick="closeRiski()">Sulge</button>
+      <button class="btn btn-primary" onclick="arvutaRiski()">⚡ Arvuta risk</button>
+    </div>
+  </div>
+</div>
+  <div class="modal vmodal" style="max-width:520px;">
+    <div class="modal-title">📣 Lõigu reklaam</div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6;">Sinu ettevõte kuvatakse valitud jõelõikude all — kasutajad näevad otse sinu kontakte ja saavad pärida matka.</p>
+    <!-- Aktiivne tellimus -->
+    <div id="reklaam-status" style="margin-bottom:14px;"></div>
+    <!-- Reklaam teksti seadistus -->
+    <div id="reklaam-seadistus" style="display:none;">
+      <div class="mrow">
+        <label>Ettevõtte nimi *</label>
+        <input id="rek-nimi" type="text" placeholder="nt Lõuna Seiklused OÜ" maxlength="80"/>
+      </div>
+      <div class="mrow">
+        <label>Lühike kirjeldus *</label>
+        <input id="rek-tekst" type="text" placeholder="nt Kanuumatk juhendajaga, varustus olemas" maxlength="120"/>
+      </div>
+      <div class="mrow">
+        <label>E-post *</label>
+        <input id="rek-email" type="email" placeholder="info@ettevote.ee"/>
+      </div>
+      <div class="mrow">
+        <label>Telefon (valikuline)</label>
+        <input id="rek-tel" type="tel" placeholder="+372 5123 4567"/>
+      </div>
+      <div class="mrow">
+        <label>Veebileht (valikuline)</label>
+        <input id="rek-veeb" type="url" placeholder="https://ettevote.ee"/>
+      </div>
+      <div class="mrow">
+        <label>Teenused (komaga eraldatud)</label>
+        <input id="rek-teenused" type="text" placeholder="Paadid, Transport, Juhendaja, Toitlustus"/>
+      </div>
+      <!-- Lõikude valik (kui pakett lubab) -->
+      <div id="rek-loigud-plokk" style="margin-bottom:12px;">
+        <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">Lõigud kus kuvatakse <span id="rek-loigud-limit" style="color:var(--accent);"></span></label>
+        <div id="rek-loigud-list" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:9px;padding:8px;background:var(--bg);"></div>
+      </div>
+      <button class="btn btn-primary" onclick="saveLoikReklaam()" style="width:100%;">💾 Salvesta reklaam</button>
+    </div>
+    <!-- Kui pole tellimust -->
+    <div id="reklaam-no-sub" style="text-align:center;padding:20px;display:none;">
+      <div style="font-size:40px;margin-bottom:10px;">📣</div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px;">Telli lõigu reklaam</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5;">Jõua täpselt nende kasutajateni kes planeerivad matka sinu piirkonnas.</div>
+      <button class="btn btn-primary" onclick="closeLRModal();openPricing('reklaam');" style="width:100%;">Vaata hindu →</button>
+    </div>
+    <div class="mact">
+      <button class="btn btn-primary" onclick="closeLRModal()">Sulge</button>
+    </div>
+  </div>
+</div>
   <div class="modal vmodal">
     <div class="modal-title">🎒 Varustuse nimekirja mallid</div>
     <div id="vm-list" style="margin-bottom:12px;"></div>
@@ -2079,23 +2187,13 @@ function renderLoik(l){
   // Ilmaprognoosi paneel (täidetakse asünkroonselt)
   html+='<div id="weather-panel" class="weather-panel">⏳ Laen ilmaprognoosi...</div>';
   // Kontaktinfo plokk (Veeretked.ee)
-  html+=`<div class="vp-contact">
-    <div class="vp-contact-title">🚣 Soovid sellele lõigule matka?</div>
-    <div class="vp-contact-features">
-      <span>Paadid ja varustus</span>
-      <span>Transport</span>
-      <span>Juhendaja</span>
-      <span>Toitlustus</span>
-    </div>
-    <div class="vp-contact-actions">
-      <a href="mailto:info@veeretked.ee?subject=Päring: ${encodeURIComponent(l.jogi+' / '+l.nimi)}" class="vp-contact-btn primary">📧 Saada päring</a>
-      <a href="https://veeretked.ee" target="_blank" rel="noopener" class="vp-contact-btn">🌐 veeretked.ee</a>
-    </div>
-  </div>`;
+  // Kontaktinfo plokk — näita sponsori reklaami kui on, muidu veeretked.ee oma
+  html+=`<div id="vp-contact-plokk"></div>`;
   document.getElementById('vp-content').innerHTML=html;
   // Initialize map
   setTimeout(()=>initLoikMap(l, myPunktid), 80);
-  // Lae ilmaprognoos (asünkr.)
+  // Lae sponsor ja ilmaprognoos paralleelselt
+  loadLoikSponsor(l);
   if(l.algus){
     fetchWeather(l.algus[0], l.algus[1]).then(w=>renderWeather(w));
   } else {
@@ -2182,6 +2280,8 @@ async function openGraph(jogi, lat, lng){
     history=getHistoryFor(r);
   }
   renderGraph(w, history, r);
+  // Lisa veetaseme prognoos graafiku alla
+  if(r)setTimeout(()=>renderRiverPrognoos(r, document.getElementById('g-content')),200);
 }
 
 function closeGraph(){
@@ -3367,6 +3467,404 @@ function getVeetaseHoiatus(r){
   }
 }
 
+// =============== STRIPE MAKSED ===============
+
+// Stripe Payment Links — asenda oma linke pärast Stripe seadistust
+const STRIPE_LINKS = {
+  premium_kuu:    'https://buy.stripe.com/PREMIUM_KUU_PLACEHOLDER',
+  premium_aasta:  'https://buy.stripe.com/PREMIUM_AASTA_PLACEHOLDER',
+  guide_kuu:      'https://buy.stripe.com/GUIDE_KUU_PLACEHOLDER',
+  guide_aasta:    'https://buy.stripe.com/GUIDE_AASTA_PLACEHOLDER',
+  reklaam_starter:'https://buy.stripe.com/REKLAAM_STARTER_PLACEHOLDER',
+  reklaam_pro:    'https://buy.stripe.com/REKLAAM_PRO_PLACEHOLDER',
+  reklaam_unlimited:'https://buy.stripe.com/REKLAAM_UNLIMITED_PLACEHOLDER',
+};
+
+// Kliendi portaali link (Stripe Customer Portal — tellimuse haldus)
+const STRIPE_PORTAL = 'https://billing.stripe.com/PORTAL_PLACEHOLDER';
+
+let pricingPeriod='kuu';
+let pricingTab='plans'; // 'plans' | 'reklaam'
+
+const PRICING_PLANS = {
+  kuu: [
+    {
+      id:'premium_kuu', tier:'premium',
+      icon:'⭐', nimi:'Premium',
+      hind:'4.99', valuuta:'€', periood:'/kuus',
+      features:['GPS sõidulogi + statistika','Loo oma lõike','Saavutused + edetabel','Jõe vestlus + fotod','Matka liitumine'],
+      cta:'Alusta Premiumit',
+    },
+    {
+      id:'guide_kuu', tier:'guide',
+      icon:'🧭', nimi:'Matkajuht',
+      hind:'14.99', valuuta:'€', periood:'/kuus',
+      highlighted:true,
+      features:['Kõik Premiumist','Loo ja halda matku','Klientide live GPS','Lepingu- ja varustuse mallid','Tagasiside analüütika','Grupivestlus'],
+      cta:'Alusta Matkajuhina',
+    },
+  ],
+  aasta: [
+    {
+      id:'premium_aasta', tier:'premium',
+      icon:'⭐', nimi:'Premium',
+      hind:'39.99', valuuta:'€', periood:'/aastas',
+      badge:'Säästad 20€',
+      features:['GPS sõidulogi + statistika','Loo oma lõike','Saavutused + edetabel','Jõe vestlus + fotod','Matka liitumine'],
+      cta:'Alusta Premiumit',
+    },
+    {
+      id:'guide_aasta', tier:'guide',
+      icon:'🧭', nimi:'Matkajuht',
+      hind:'119', valuuta:'€', periood:'/aastas',
+      highlighted:true,
+      badge:'Säästad 61€',
+      features:['Kõik Premiumist','Loo ja halda matku','Klientide live GPS','Lepingu- ja varustuse mallid','Tagasiside analüütika','Grupivestlus'],
+      cta:'Alusta Matkajuhina',
+    },
+  ],
+};
+
+const REKLAAM_PLANS = [
+  {
+    id:'reklaam_starter', icon:'📍',
+    nimi:'Starter', hind:'9.99', valuuta:'€', periood:'/kuus',
+    loike:'1–3 lõiku',
+    loikeMax:3,
+    features:['Kuvatakse 1–3 valitud lõigul','E-post + kirjeldus','Muuda igal ajal'],
+    cta:'Telli Starter',
+  },
+  {
+    id:'reklaam_pro', icon:'📣',
+    nimi:'Pro', hind:'19.99', valuuta:'€', periood:'/kuus',
+    highlighted:true,
+    loike:'kuni 10 lõiku',
+    loikeMax:10,
+    features:['Kuvatakse kuni 10 lõigul','Kõik Starter funktsionid','Telefon + veebileht','Prioriteetne kuvamine'],
+    cta:'Telli Pro',
+  },
+  {
+    id:'reklaam_unlimited', icon:'🚀',
+    nimi:'Unlimited', hind:'49.99', valuuta:'€', periood:'/kuus',
+    loike:'piiramata lõigud',
+    loikeMax:999,
+    features:['Kuvatakse kõigil lõikudel','Kõik Pro funktsionid','Rohkem välju','Esimene kohas'],
+    cta:'Telli Unlimited',
+  },
+];
+
+function openPricing(tab='plans'){
+  pricingTab=tab;
+  document.getElementById('pricingmodal').classList.add('open');
+  if(tab==='reklaam'){
+    renderPricingReklaam();
+  } else {
+    renderPricingPlans();
+  }
+}
+function closePricing(){ document.getElementById('pricingmodal').classList.remove('open'); }
+
+function setPricingPeriod(p){
+  pricingPeriod=p;
+  document.getElementById('ptog-kuu').style.background=p==='kuu'?'var(--accent)':'transparent';
+  document.getElementById('ptog-kuu').style.color=p==='kuu'?'#fff':'var(--text2)';
+  document.getElementById('ptog-aasta').style.background=p==='aasta'?'var(--accent)':'transparent';
+  document.getElementById('ptog-aasta').style.color=p==='aasta'?'#fff':'var(--text2)';
+  renderPricingPlans();
+}
+
+function renderPricingPlans(){
+  // Peida toggle kui reklaam tab
+  document.getElementById('pricing-toggle').style.display='flex';
+  const plans=PRICING_PLANS[pricingPeriod]||PRICING_PLANS.kuu;
+  const myTier=currentUser?getUserTier():'free';
+  let html='';
+  plans.forEach(p=>{
+    const owned=myTier===p.tier||myTier==='admin'||(p.tier==='premium'&&myTier==='guide');
+    html+=`<div style="background:${p.highlighted?'linear-gradient(135deg,#f0fdf7,#e6f7ef)':'var(--bg)'};border:${p.highlighted?'2px solid var(--green)':'1px solid var(--border)'};border-radius:14px;padding:18px;position:relative;">
+      ${p.badge?`<div style="position:absolute;top:-10px;right:14px;background:var(--green);color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:10px;">${p.badge}</div>`:''}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:20px;">${p.icon}</span>
+          <div>
+            <div style="font-size:15px;font-weight:700;color:var(--text);">${p.nimi}</div>
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:600;color:var(--accent);">${p.hind}${p.valuuta}</div>
+          <div style="font-size:11px;color:var(--text3);">${p.periood}</div>
+        </div>
+      </div>
+      <ul style="list-style:none;padding:0;margin:0 0 14px;display:flex;flex-direction:column;gap:5px;">
+        ${p.features.map(f=>`<li style="font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px;"><span style="color:var(--green);font-weight:700;">✓</span>${f}</li>`).join('')}
+      </ul>
+      ${owned
+        ?`<div style="text-align:center;padding:8px;background:var(--green-bg);border-radius:8px;font-size:12px;font-weight:600;color:var(--green);">✅ Aktiivne</div>`
+        :`<button onclick="stripeCheckout('${p.id}')" class="btn btn-primary" style="width:100%;font-size:13px;padding:10px;">${p.cta} →</button>`
+      }
+    </div>`;
+  });
+  // Halda tellimust nupp
+  if(myTier==='premium'||myTier==='guide'){
+    html+=`<div style="text-align:center;margin-top:4px;">
+      <button onclick="window.open('${STRIPE_PORTAL}','_blank')" style="font-size:11px;color:var(--text3);background:transparent;border:none;cursor:pointer;text-decoration:underline;">Halda tellimust / tühista</button>
+    </div>`;
+  }
+  document.getElementById('pricing-cards').innerHTML=html;
+}
+
+function renderPricingReklaam(){
+  document.getElementById('pricing-toggle').style.display='none';
+  const myTier=currentUser?getUserTier():'free';
+  if(!['guide','admin'].includes(myTier)){
+    document.getElementById('pricing-cards').innerHTML=`<div style="text-align:center;padding:20px;background:var(--orange-bg);border:1px solid #fcd08a;border-radius:12px;">
+      <div style="font-size:13px;color:var(--orange);font-weight:600;margin-bottom:8px;">⚠️ Nõuab Matkajuhi paketti</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Lõigu reklaam on saadaval ainult Matkajuhi paketi omanikele.</div>
+      <button onclick="pricingTab='plans';renderPricingPlans();document.getElementById('pricing-toggle').style.display='flex';" class="btn btn-primary">Vaata Matkajuhi paketti →</button>
+    </div>`;
+    return;
+  }
+  let html='';
+  REKLAAM_PLANS.forEach(p=>{
+    const owned=myReklaami&&myReklaami.pakett===p.id;
+    html+=`<div style="background:${p.highlighted?'linear-gradient(135deg,#f0fdf7,#e6f7ef)':'var(--bg)'};border:${p.highlighted?'2px solid var(--green)':'1px solid var(--border)'};border-radius:14px;padding:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span style="font-size:18px;">${p.icon}</span>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text);">${p.nimi}</div>
+            <div style="font-size:11px;color:var(--text3);">${p.loike}</div>
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:600;color:var(--accent);">${p.hind}€</div>
+          <div style="font-size:11px;color:var(--text3);">${p.periood}</div>
+        </div>
+      </div>
+      <ul style="list-style:none;padding:0;margin:0 0 12px;display:flex;flex-direction:column;gap:4px;">
+        ${p.features.map(f=>`<li style="font-size:12px;color:var(--text);display:flex;align-items:center;gap:5px;"><span style="color:var(--green);font-weight:700;">✓</span>${f}</li>`).join('')}
+      </ul>
+      ${owned
+        ?`<div style="text-align:center;padding:7px;background:var(--green-bg);border-radius:8px;font-size:12px;font-weight:600;color:var(--green);">✅ Aktiivne</div>`
+        :`<button onclick="stripeCheckout('${p.id}')" class="btn btn-primary" style="width:100%;font-size:12px;padding:9px;">${p.cta} →</button>`
+      }
+    </div>`;
+  });
+  document.getElementById('pricing-cards').innerHTML=html;
+}
+
+function stripeCheckout(planId){
+  if(!currentUser){ alert('Logi kõigepealt sisse'); return; }
+  const link=STRIPE_LINKS[planId];
+  if(!link||link.includes('PLACEHOLDER')){
+    alert('Stripe pole veel seadistatud. Lisa Payment Link URL koodis.');
+    return;
+  }
+  const uid=currentUser.uid;
+  const email=currentUser.email||'';
+  const url=link+'?client_reference_id='+encodeURIComponent(uid)+'&prefilled_email='+encodeURIComponent(email);
+  window.open(url,'_blank');
+  closePricing();
+}
+
+function getUserTier(){ return window.myUserTier||'free'; }
+
+// =============== LÕIGU REKLAAM ===============
+
+let myReklaami=null; // Kasutaja aktiivne reklaam
+
+async function loadMyReklaami(){
+  if(!currentUser||!window.fb)return;
+  try{
+    const fb=window.fb;
+    const snap=await fb.getDoc(fb.doc(fb.db,'loikReklaam',currentUser.uid));
+    myReklaami=snap.exists()?{id:snap.id,...snap.data()}:null;
+  }catch(e){myReklaami=null;}
+}
+
+// Lae lõigu sponsor — näita kas on sponsor või veeretked default
+async function loadLoikSponsor(loik){
+  const el=document.getElementById('vp-contact-plokk');
+  if(!el)return;
+  // Otsi aktiivne sponsor sellele lõigule
+  let sponsor=null;
+  if(window.fb){
+    try{
+      const fb=window.fb;
+      const snap=await new Promise((res,rej)=>{
+        const u=fb.onSnapshot(
+          fb.query(fb.collection(fb.db,'loikReklaam'),
+            fb.where('aktiivne','==',true)),
+          s=>{u();res(s);},rej
+        );
+      });
+      snap.forEach(d=>{
+        const data=d.data();
+        // Kontrolli kas see lõik on sponsori nimekirjas
+        if(data.loigud&&(data.loigud.includes('*')||data.loigud.includes(loik.id))){
+          // Eelistame spetsiifiliselt selle lõigu sponsorit
+          if(!sponsor||data.loigud.includes(loik.id)){
+            sponsor={id:d.id,...data};
+          }
+        }
+      });
+    }catch(e){}
+  }
+  if(sponsor){
+    renderSponsorPlokk(el, sponsor, loik);
+  } else {
+    renderDefaultCTA(el, loik);
+  }
+}
+
+function renderSponsorPlokk(el, sponsor, loik){
+  const teenused=(sponsor.teenused||'').split(',').map(t=>t.trim()).filter(Boolean);
+  el.innerHTML=`<div class="vp-contact" style="border-color:#a7d9bc;">
+    <div class="vp-contact-title">🚣 Soovid sellele lõigule matka?</div>
+    <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">${escapeHtml(sponsor.nimi||'')}</div>
+    ${sponsor.tekst?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">${escapeHtml(sponsor.tekst)}</div>`:''}
+    ${teenused.length>0?`<div class="vp-contact-features">${teenused.map(t=>`<span>${escapeHtml(t)}</span>`).join('')}</div>`:''}
+    <div class="vp-contact-actions">
+      <a href="mailto:${escapeHtml(sponsor.email||'')}?subject=Päring: ${encodeURIComponent((loik.jogi||'')+' / '+(loik.nimi||''))}" class="vp-contact-btn primary">📧 Saada päring</a>
+      ${sponsor.tel?`<a href="tel:${escapeHtml(sponsor.tel)}" class="vp-contact-btn">📞 Helista</a>`:''}
+      ${sponsor.veeb?`<a href="${escapeHtml(sponsor.veeb)}" target="_blank" rel="noopener" class="vp-contact-btn">🌐 Veebileht</a>`:''}
+    </div>
+    <div style="font-size:9px;color:var(--text3);margin-top:8px;text-align:right;">reklaam · <a href="#" onclick="event.preventDefault();openPricing('reklaam');" style="color:var(--text3);text-decoration:underline;">telli siia</a></div>
+  </div>`;
+}
+
+function renderDefaultCTA(el, loik){
+  const isGuide=currentUser&&['guide','admin'].includes(getUserTier());
+  el.innerHTML=`<div class="vp-contact">
+    <div class="vp-contact-title">🚣 Soovid sellele lõigule matka?</div>
+    <div class="vp-contact-features">
+      <span>Paadid ja varustus</span>
+      <span>Transport</span>
+      <span>Juhendaja</span>
+      <span>Toitlustus</span>
+    </div>
+    <div class="vp-contact-actions">
+      <a href="mailto:info@veeretked.ee?subject=Päring: ${encodeURIComponent((loik.jogi||'')+' / '+(loik.nimi||''))}" class="vp-contact-btn primary">📧 Saada päring</a>
+      <a href="https://veeretked.ee" target="_blank" rel="noopener" class="vp-contact-btn">🌐 veeretked.ee</a>
+    </div>
+    ${isGuide?`<div style="font-size:11px;color:var(--text2);margin-top:10px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.07);display:flex;align-items:center;justify-content:space-between;">
+      <span>Kuva siin oma ettevõte?</span>
+      <button onclick="openLRModal()" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:500;">📣 Lisa reklaam</button>
+    </div>`:''}
+  </div>`;
+}
+
+// Reklaam haldamine
+async function openLRModal(){
+  document.getElementById('loikreklaommodal').classList.add('open');
+  await loadMyReklaami();
+  renderLRModal();
+}
+function closeLRModal(){ document.getElementById('loikreklaommodal').classList.remove('open'); }
+
+function renderLRModal(){
+  const statusEl=document.getElementById('reklaam-status');
+  const seadEl=document.getElementById('reklaam-seadistus');
+  const noSubEl=document.getElementById('reklaam-no-sub');
+  if(!myReklaami||!myReklaami.aktiivne){
+    statusEl.innerHTML='';
+    seadEl.style.display='none';
+    noSubEl.style.display='block';
+    return;
+  }
+  noSubEl.style.display='none';
+  // Näita tellimuse staatust
+  const p=REKLAAM_PLANS.find(pp=>pp.id===myReklaami.pakett)||REKLAAM_PLANS[0];
+  statusEl.innerHTML=`<div style="background:var(--green-bg);border:1px solid #a7d9bc;border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div>
+      <div style="font-size:12px;font-weight:700;color:var(--green);">✅ Aktiivne: ${p?.nimi||myReklaami.pakett}</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:2px;">Max ${p?.loikeMax||3} lõiku · ${p?.hind||'?'}€/kuus</div>
+    </div>
+    <button onclick="window.open('${STRIPE_PORTAL}','_blank')" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;">Halda →</button>
+  </div>`;
+  seadEl.style.display='block';
+  // Täida vorm
+  document.getElementById('rek-nimi').value=myReklaami.nimi||'';
+  document.getElementById('rek-tekst').value=myReklaami.tekst||'';
+  document.getElementById('rek-email').value=myReklaami.email||currentUser?.email||'';
+  document.getElementById('rek-tel').value=myReklaami.tel||'';
+  document.getElementById('rek-veeb').value=myReklaami.veeb||'';
+  document.getElementById('rek-teenused').value=(myReklaami.teenused||'');
+  // Lõikude valik
+  const loikeMax=p?.loikeMax||3;
+  document.getElementById('rek-loigud-limit').textContent=loikeMax>=999?'(piiramata)':'(max '+loikeMax+')';
+  renderReklaami_loigud(myReklaami.loigud||[], loikeMax);
+}
+
+function renderReklaami_loigud(selected, max){
+  const el=document.getElementById('rek-loigud-list');
+  if(!el)return;
+  if(max>=999){
+    el.innerHTML=`<div style="font-size:12px;color:var(--green);padding:8px;">✅ Unlimited — kuvatakse kõigil lõikudel automaatselt</div>`;
+    return;
+  }
+  let html='';
+  // Grupeeri loigudByJogi järgi
+  const byJogi=window.loigudByJogi||{};
+  Object.entries(byJogi).sort(([a],[b])=>a.localeCompare(b,'et')).forEach(([jogi,ls])=>{
+    html+=`<div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;padding:6px 4px 2px;">${escapeHtml(jogi)}</div>`;
+    ls.forEach(l=>{
+      const checked=selected.includes(l.id)||selected.includes('*');
+      html+=`<label style="display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text);">
+        <input type="checkbox" class="rek-loik-cb" value="${escapeHtml(l.id)}" ${checked?'checked':''} style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer;"/>
+        ${escapeHtml(l.nimi||l.id)}
+        <span style="font-size:10px;color:var(--text3);">${l.pikkus?l.pikkus+'km':''}</span>
+      </label>`;
+    });
+  });
+  el.innerHTML=html||'<div style="font-size:12px;color:var(--text3);padding:8px;">Lõike pole laetud</div>';
+  // Keela lisavalimine kui max täis
+  el.querySelectorAll('.rek-loik-cb').forEach(cb=>{
+    cb.addEventListener('change',()=>{
+      const checked=[...el.querySelectorAll('.rek-loik-cb:checked')];
+      if(checked.length>max){cb.checked=false;showToast(`Max ${max} lõiku selle paketiga`);}
+    });
+  });
+}
+
+async function saveLoikReklaam(){
+  if(!currentUser||!window.fb){return;}
+  const nimi=document.getElementById('rek-nimi').value.trim();
+  const email=document.getElementById('rek-email').value.trim();
+  if(!nimi||!email){alert('Täida kohustuslikud väljad (nimi, e-post)');return;}
+  const p=REKLAAM_PLANS.find(pp=>pp.id===myReklaami?.pakett);
+  const loikeMax=p?.loikeMax||3;
+  let loigud=[];
+  if(loikeMax>=999){
+    loigud=['*'];
+  } else {
+    loigud=[...document.querySelectorAll('.rek-loik-cb:checked')].map(cb=>cb.value);
+  }
+  const data={
+    uid:currentUser.uid,
+    nimi,
+    tekst:document.getElementById('rek-tekst').value.trim(),
+    email,
+    tel:document.getElementById('rek-tel').value.trim(),
+    veeb:document.getElementById('rek-veeb').value.trim(),
+    teenused:document.getElementById('rek-teenused').value.trim(),
+    loigud,
+    pakett:myReklaami?.pakett||'reklaam_starter',
+    aktiivne:true,
+    updatedAt:window.fb.serverTimestamp(),
+  };
+  try{
+    await window.fb.setDoc(window.fb.doc(window.fb.db,'loikReklaam',currentUser.uid),data,{merge:true});
+    myReklaami={...myReklaami,...data};
+    showToast('✅ Reklaam salvestatud!');
+    closeLRModal();
+    // Uuenda CTA plokk
+    if(activeLoik)loadLoikSponsor(activeLoik);
+  }catch(err){
+    alert('Viga salvestamisel: '+err.message);
+  }
+}
+
 // =============== LÕIGU VEETASEME PIIRID ===============
 
 const SK_LOIK_SP='rv9_loik_sp'; // localStorage key lõigu piiride jaoks
@@ -3571,6 +4069,349 @@ async function openProfiil(uid){
 }
 
 function closeProfiil(){document.getElementById('profiilmodal').classList.remove('open');}
+
+// =============== MATKA JÄRELRAPORT ===============
+
+async function openJarelRaport(matkaId){
+  document.getElementById('jarelraportmodal').classList.add('open');
+  document.getElementById('jarelraport-content').innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">⏳ Laen...</div>';
+  try{
+    const fb=window.fb;
+    // Lae matka andmed
+    const mSnap=await fb.getDoc(fb.doc(fb.db,'matkad',matkaId));
+    if(!mSnap.exists()){document.getElementById('jarelraport-content').innerHTML='<div style="color:var(--red);">Matka ei leitud</div>';return;}
+    const m=mSnap.data();
+    // Lae osalejad
+    const oSnap=await new Promise((res,rej)=>{const u=fb.onSnapshot(fb.collection(fb.db,'matkad',matkaId,'osalejad'),s=>{u();res(s);},rej);});
+    const osalejad=[];oSnap.forEach(d=>osalejad.push({id:d.id,...d.data()}));
+    // Arvuta kestus
+    const algus=m.createdAt?.toDate?.();
+    const lopp=m.lopetatudAt?.toDate?.();
+    let kestus='—';
+    if(algus&&lopp){
+      const ms=lopp-algus;
+      const h=Math.floor(ms/3600000);
+      const min=Math.floor((ms%3600000)/60000);
+      kestus=h>0?`${h}h ${min}min`:`${min}min`;
+    }
+    // Lae veetaseme info (lõigu jõe järgi)
+    const jõgi=m.jogi||m.jõgi||'';
+    const river=rivers.find(r=>r.jogi===jõgi);
+    const veetase=river?`${river.level} cm`:'—';
+    // Lae tagasiside vastuste arv
+    const vSnap=await new Promise((res,rej)=>{const u=fb.onSnapshot(fb.collection(fb.db,'matkad',matkaId,'vastused'),s=>{u();res(s);},rej);});
+    let vastuseid=0;vSnap.forEach(()=>vastuseid++);
+    renderJarelRaport(m, osalejad, kestus, veetase, vastuseid);
+  }catch(err){
+    document.getElementById('jarelraport-content').innerHTML='<div style="color:var(--red);">⚠️ '+escapeHtml(err.message)+'</div>';
+  }
+}
+
+function closeJarelRaport(){document.getElementById('jarelraportmodal').classList.remove('open');}
+
+function renderJarelRaport(m, osalejad, kestus, veetase, vastuseid){
+  const el=document.getElementById('jarelraport-content');
+  const lopp=m.lopetatudAt?.toDate?.();
+  const dateStr=lopp?lopp.toLocaleDateString('et-EE',{day:'numeric',month:'long',year:'numeric'}):'—';
+  const noustiNimetamine={
+    'Väga hea':'😊','Hea':'🙂','Rahuldav':'😐','Halb':'😟','Väga halb':'😢'
+  };
+  let html=`
+  <div style="background:linear-gradient(135deg,var(--green-bg),#d4f0e4);border:1px solid #a7d9bc;border-radius:12px;padding:16px;margin-bottom:14px;">
+    <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px;">${escapeHtml(m.nimi||m.title||'—')}</div>
+    <div style="font-size:12px;color:var(--text2);">🌊 ${escapeHtml(m.jogi||'—')} ${m.loik?'· '+escapeHtml(m.loik):''}</div>
+    <div style="font-size:12px;color:var(--text3);margin-top:2px;">Lõpetatud ${dateStr}</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+    ${[
+      ['👥','Osalejaid',osalejad.length+' inimest'],
+      ['⏱️','Kestus',kestus],
+      ['💧','Veetase',veetase],
+      ['📝','Tagasiside',vastuseid+' vastust'],
+    ].map(([icon,lbl,val])=>`<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;">
+      <div style="font-size:22px;margin-bottom:4px;">${icon}</div>
+      <div style="font-size:20px;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace;">${val}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;">${lbl}</div>
+    </div>`).join('')}
+  </div>`;
+  // Osalejate nimekiri
+  if(osalejad.length>0){
+    html+=`<div style="margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">👥 Osalejad</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${osalejad.map(o=>`<div style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:20px;">
+          ${o.photoURL?`<img src="${escapeHtml(o.photoURL)}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;" alt=""/>`:
+            `<div style="width:20px;height:20px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700;">${(o.name||'?').charAt(0)}</div>`}
+          <span style="font-size:12px;color:var(--text);">${escapeHtml(o.name||o.nimi||'?')}</span>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+  // Varustuse nimekiri
+  if(m.varustus&&m.varustus.length>0){
+    html+=`<div style="margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">🎒 Kasutatud varustus</div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;">
+        ${m.varustus.map(v=>`<div style="font-size:12px;color:var(--text);padding:2px 0;">✓ ${escapeHtml(v)}</div>`).join('')}
+      </div>
+    </div>`;
+  }
+  // Tagasiside nupp
+  if(vastuseid>0){
+    html+=`<button onclick="closeJarelRaport();openVastusedKokkuvote('${m.id||''}');" class="btn btn-primary" style="width:100%;margin-top:4px;">📊 Vaata tagasiside vastuseid</button>`;
+  }
+  el.innerHTML=html;
+}
+
+// =============== RISKIANALÜÜS ===============
+
+const RISKI_KYSIMUSED=[
+  {
+    id:'veetase', kysimus:'Milline on praegune veetase?',
+    valikud:[
+      {tekst:'Madal — alla soovitatud miinimumi',skoor:3},
+      {tekst:'Sobiv — normaalne veetase',skoor:0},
+      {tekst:'Kõrge — läheneb maksimumile',skoor:2},
+      {tekst:'Väga kõrge / üleujutus',skoor:4},
+    ]
+  },
+  {
+    id:'ilm', kysimus:'Milline on ilmaprognoos matka ajaks?',
+    valikud:[
+      {tekst:'Päikseline, tuuletu',skoor:0},
+      {tekst:'Pilves, kerge tuul',skoor:0},
+      {tekst:'Vihm või äike oodata',skoor:2},
+      {tekst:'Tugev torm / äikesehoiatus',skoor:4},
+    ]
+  },
+  {
+    id:'juhi_kogemus', kysimus:'Milline on matkajuhi kogemus sellel konkreetsel lõigul?',
+    valikud:[
+      {tekst:'Kogenud — olen seda lõiku mitu korda juhendanud',skoor:0},
+      {tekst:'Mõningane — olen seda lõiku 1–2 korda läbinud',skoor:1},
+      {tekst:'Esimest korda selle lõiguga — tean lõiku teoreetiliselt',skoor:2},
+      {tekst:'Esimest korda — pole lõiku varem läbinud',skoor:3},
+    ]
+  },
+  {
+    id:'kogemus', kysimus:'Milline on grupi keskmise kogemustase?',
+    valikud:[
+      {tekst:'Kogenud — kõik on sõitnud varem',skoor:0},
+      {tekst:'Segagrupp — mõned kogenud',skoor:1},
+      {tekst:'Algajad — enamik esmakordsed',skoor:2},
+      {tekst:'Lapsed või erivajadustega inimesed',skoor:3},
+    ]
+  },
+  {
+    id:'varustus', kysimus:'Kas kõigil on kohustuslik ohutusvarustus?',
+    valikud:[
+      {tekst:'Jah — päästevest, kiiver, abi komplekt',skoor:0},
+      {tekst:'Päästevest on, kiiver puudub',skoor:1},
+      {tekst:'Osaline — mõnel puudub päästevest',skoor:3},
+      {tekst:'Ei — varustus puudub',skoor:4},
+    ]
+  },
+  {
+    id:'grupp', kysimus:'Kui suur on grupp?',
+    valikud:[
+      {tekst:'2–6 inimest',skoor:0},
+      {tekst:'7–12 inimest',skoor:1},
+      {tekst:'13–20 inimest',skoor:2},
+      {tekst:'Üle 20 inimese',skoor:3},
+    ]
+  },
+  {
+    id:'side', kysimus:'Kas on side ja hädaabi ligipääs marsruudil?',
+    valikud:[
+      {tekst:'Hea — mobiililevi kogu lõigul',skoor:0},
+      {tekst:'Enamasti — osades kohtades katk',skoor:1},
+      {tekst:'Nõrk — väljas levivööndit',skoor:2},
+      {tekst:'Puudub — täiesti eemal asustusest',skoor:3},
+    ]
+  },
+];
+
+let riskiVastused={};
+let activeRiskiMatkaId=null;
+
+function openRiskiAnalyys(matkaId){
+  activeRiskiMatkaId=matkaId;
+  riskiVastused={};
+  document.getElementById('riskimodal').classList.add('open');
+  renderRiskiKysimused();
+}
+function closeRiski(){document.getElementById('riskimodal').classList.remove('open');activeRiskiMatkaId=null;}
+
+function renderRiskiKysimused(){
+  const el=document.getElementById('riski-content');
+  let html='<div style="display:flex;flex-direction:column;gap:14px;">';
+  RISKI_KYSIMUSED.forEach((q,qi)=>{
+    html+=`<div>
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">${qi+1}. ${escapeHtml(q.kysimus)}</div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        ${q.valikud.map((v,vi)=>`<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text);transition:all .1s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor=riskiVastused['${q.id}']==${vi}?'var(--accent)':'var(--border)'">
+          <input type="radio" name="riski-${q.id}" value="${vi}" onchange="riskiVastused['${q.id}']=${vi};this.closest('div').querySelectorAll('label').forEach(l=>{l.style.background='var(--surface)';l.style.borderColor='var(--border)';});this.closest('label').style.background='var(--accent-light)';this.closest('label').style.borderColor='var(--accent)';" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0;"/>
+          <span>${escapeHtml(v.tekst)}</span>
+          ${v.skoor>0?`<span style="margin-left:auto;font-size:10px;background:${v.skoor>=3?'var(--red-bg)':v.skoor>=2?'var(--orange-bg)':'var(--grey-bg)'};color:${v.skoor>=3?'var(--red)':v.skoor>=2?'var(--orange)':'var(--grey)'};padding:2px 7px;border-radius:9px;font-family:'DM Mono',monospace;font-weight:600;">+${v.skoor}</span>`:''}
+        </label>`).join('')}
+      </div>
+    </div>`;
+  });
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+async function arvutaRiski(){
+  // Kontrolli kõik vastatud
+  const vastamata=RISKI_KYSIMUSED.filter(q=>riskiVastused[q.id]===undefined);
+  if(vastamata.length>0){
+    alert(`Palun vasta kõigile küsimustele. Vastamata: ${vastamata.map(q=>q.kysimus.substring(0,30)).join(', ')}`);
+    return;
+  }
+  // Arvuta skoor
+  let koguskoor=0;
+  RISKI_KYSIMUSED.forEach(q=>{
+    const idx=riskiVastused[q.id];
+    koguskoor+=q.valikud[idx].skoor;
+  });
+  // Max võimalik skoor
+  const maxSkoor=RISKI_KYSIMUSED.reduce((s,q)=>s+Math.max(...q.valikud.map(v=>v.skoor)),0);
+  // Normaliseeri 1-10 skaalale
+  const skoor=Math.min(10,Math.max(1,Math.round((koguskoor/maxSkoor)*9)+1));
+  // Salvesta Firestore'i
+  if(activeRiskiMatkaId&&window.fb){
+    try{
+      const vastused={};
+      RISKI_KYSIMUSED.forEach(q=>{
+        const idx=riskiVastused[q.id];
+        vastused[q.id]={valik:q.valikud[idx].tekst,skoor:q.valikud[idx].skoor};
+      });
+      await window.fb.updateDoc(window.fb.doc(window.fb.db,'matkad',activeRiskiMatkaId),{
+        riskiskoor:skoor,
+        riskivastused:vastused,
+        riskiaeg:window.fb.serverTimestamp()
+      });
+    }catch(e){console.warn('Riski salvestamine ebaõnnestus:',e);}
+  }
+  // Näita tulemust
+  renderRiskiTulemus(skoor, koguskoor, maxSkoor);
+}
+
+function renderRiskiTulemus(skoor, kogus, max){
+  const el=document.getElementById('riski-content');
+  const isOhtlik=skoor>=8;
+  const isKohe=skoor>=6;
+  const color=isOhtlik?'var(--red)':isKohe?'var(--orange)':skoor>=4?'#ca8a04':'var(--green)';
+  const bg=isOhtlik?'var(--red-bg)':isKohe?'var(--orange-bg)':skoor>=4?'#fefce8':'var(--green-bg)';
+  const sõnum=isOhtlik
+    ?'🚫 Matk EI TOHIKS toimuda! Risk on äärmiselt kõrge.'
+    :isKohe
+    ?'⚠️ Kõrge risk — kaaluge matka edasilükkamist.'
+    :skoor>=4
+    ?'⚡ Mõõdukas risk — tõhustage ettevalmistust.'
+    :'✅ Risk on madal — matk võib toimuda.';
+  // Riskifaktorid
+  const faktorid=RISKI_KYSIMUSED.filter(q=>{
+    const idx=riskiVastused[q.id];
+    return idx!==undefined&&q.valikud[idx].skoor>=2;
+  });
+  el.innerHTML=`
+  <div style="text-align:center;padding:20px;background:${bg};border:2px solid ${color}30;border-radius:14px;margin-bottom:16px;">
+    <div style="font-size:60px;font-weight:700;color:${color};font-family:'DM Mono',monospace;line-height:1;">${skoor}</div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:10px;">/ 10</div>
+    <div style="font-size:15px;font-weight:600;color:${color};">${sõnum}</div>
+  </div>
+  ${faktorid.length>0?`
+  <div style="margin-bottom:14px;">
+    <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">⚠️ Riskifaktorid</div>
+    <div style="display:flex;flex-direction:column;gap:5px;">
+      ${faktorid.map(q=>{
+        const idx=riskiVastused[q.id];
+        const v=q.valikud[idx];
+        return`<div style="padding:8px 12px;background:var(--surface);border:1px solid ${v.skoor>=3?'rgba(220,38,38,0.3)':'rgba(202,138,4,0.3)'};border-radius:8px;font-size:12px;">
+          <div style="font-weight:600;color:var(--text);">${escapeHtml(q.kysimus)}</div>
+          <div style="color:${v.skoor>=3?'var(--red)':'var(--orange)'};margin-top:2px;">→ ${escapeHtml(v.tekst)}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`:''}
+  <button onclick="renderRiskiKysimused()" class="btn" style="width:100%;margin-bottom:8px;">↩ Muuda vastuseid</button>
+  ${isOhtlik?`<button onclick="closeRiski()" class="btn btn-primary" style="width:100%;background:var(--red);border-color:var(--red);">Lõpeta analüüs</button>`:''}`;
+}
+
+// =============== VEETASEME PROGNOOS (Open-Meteo river discharge) ===============
+
+async function fetchRiverPrognoos(lat, lng){
+  // Open-Meteo hydrological model — river discharge prognoos
+  const params=[
+    'latitude='+lat,
+    'longitude='+lng,
+    'daily=river_discharge_max,river_discharge_min,river_discharge_mean',
+    'hourly=river_discharge',
+    'timezone=auto',
+    'forecast_days=7'
+  ].join('&');
+  try{
+    const resp=await fetch('https://flood-api.open-meteo.com/v1/flood?'+params);
+    if(!resp.ok)return null;
+    return await resp.json();
+  }catch(e){return null;}
+}
+
+// Lisa prognoos graafikusse
+async function renderRiverPrognoos(river, el){
+  if(!river||!river.level)return;
+  // Leia lõigu koordinaadid (kasuta jõe stjaami koordinaate)
+  const st=allSt.find(s=>s.jogi===river.jogi);
+  if(!st)return;
+  // Fetch koordinaadid allSt-st kui on
+  let lat=null,lng=null;
+  // Proovime river.algus koordinaate (lõigukaardilt)
+  const loigudList=window.loigudByJogi?.[river.jogi]||[];
+  const firstLoik=loigudList[0];
+  if(firstLoik?.algus){[lat,lng]=[firstLoik.algus[0],firstLoik.algus[1]];}
+  if(!lat)return;
+  const data=await fetchRiverPrognoos(lat,lng);
+  if(!data?.daily?.river_discharge_max)return;
+  const days=data.daily.time||[];
+  const maxQ=data.daily.river_discharge_max||[];
+  const meanQ=data.daily.river_discharge_mean||[];
+  if(!days.length)return;
+  // Arvuta proportsioon praeguse tasemega
+  const praeguneQ=meanQ[0]||1;
+  const currentLevel=river.level||100;
+  const maxQ_max=Math.max(...maxQ)||praeguneQ;
+  const prognoosbars=days.slice(0,7).map((d,i)=>{
+    const ratio=meanQ[i]/praeguneQ;
+    const estLevel=Math.round(currentLevel*ratio);
+    const isHigh=estLevel>river.maxSafe*0.8;
+    const isLow=estLevel<river.kayakMin;
+    const color=isHigh?'#ef4444':isLow?'#9ca3af':'#1a9e65';
+    const dayLabel=new Date(d).toLocaleDateString('et-EE',{weekday:'short'});
+    const pct=Math.min(100,Math.round((meanQ[i]/maxQ_max)*100));
+    return{d,dayLabel,estLevel,color,pct,isHigh,isLow};
+  });
+  let html=`<div class="g-section">
+    <div class="g-section-title">📈 Veetaseme prognoos (7 päeva) <span style="font-size:10px;color:var(--text3);font-weight:400;">— arvutuslik hinnang</span></div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:4px;">
+      ${prognoosbars.map(b=>`
+      <div style="text-align:center;">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:'DM Mono',monospace;">${b.dayLabel}</div>
+        <div style="height:50px;background:var(--bg);border-radius:5px;display:flex;align-items:flex-end;padding:2px;overflow:hidden;border:1px solid var(--border);">
+          <div style="width:100%;border-radius:3px;height:${b.pct}%;background:${b.color};transition:height .3s;"></div>
+        </div>
+        <div style="font-size:10px;font-weight:600;color:${b.color};margin-top:3px;font-family:'DM Mono',monospace;">~${b.estLevel}</div>
+        <div style="font-size:9px;color:var(--text3);">cm</div>
+        ${b.isHigh?'<div style="font-size:8px;color:var(--red);">kõrge</div>':''}
+        ${b.isLow?'<div style="font-size:8px;color:var(--grey);">madal</div>':''}
+      </div>`).join('')}
+    </div>
+    <div style="font-size:10px;color:var(--text3);margin-top:4px;">⚠️ Prognoos on hinnanguline — põhineb hüdroloogilisel mudelil, mitte otsesel mõõtmisel.</div>
+  </div>`;
+  // Lisa graafiku lõppu
+  const existing=document.getElementById('g-content');
+  if(existing)existing.innerHTML+=html;
+}
 
 // =============== EDETABEL ===============
 
@@ -4606,6 +5447,11 @@ function updatePremiumUI(){
   // Mu liitumised - kõigil sisselogitutel (FREE kasutaja näeb oma liitumisi)
   const joinedBtn=document.getElementById('joined-btn');
   if(joinedBtn)joinedBtn.style.display=currentUser?'inline-block':'none';
+  // Lõigu reklaam nupp - ainult guide+
+  const reklaambtn=document.getElementById('reklaam-menu-btn');
+  if(reklaambtn)reklaambtn.style.display=['guide','admin'].includes(tier)?'block':'none';
+  // Salvesta tier globaalse muutujana (Stripe checkout jm jaoks)
+  window.myUserTier=tier;
   // Lae kasutaja oma lõigud (kui premium+)
   if(canCreateLoik()){
     loadUserLoigud();
@@ -5119,7 +5965,10 @@ function renderMyMatkad(){
           <div class="mm-card-meta">${escapeHtml(m.jogi||'')}${m.loik?' · '+escapeHtml(m.loik):''}</div>
           <div class="mm-card-meta">📅 ${dateStr}</div>
         </div>
-        <div class="mm-card-status" style="${statusColor}border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;">${statusText}</div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
+          <div class="mm-card-status" style="${statusColor}border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;">${statusText}</div>
+          ${m.riskiskoor!=null?`<div style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:${m.riskiskoor>=8?'var(--red-bg)':m.riskiskoor>=6?'var(--orange-bg)':m.riskiskoor>=4?'#fefce8':'var(--green-bg)'};color:${m.riskiskoor>=8?'var(--red)':m.riskiskoor>=6?'var(--orange)':m.riskiskoor>=4?'#ca8a04':'var(--green)'};">⚠️ Risk: ${m.riskiskoor}/10</div>`:''}
+        </div>
       </div>
       <div class="mm-card-link">
         <span style="font-size:11px;color:var(--text3);">🔗 Jagatav link klientidele:</span>
@@ -5135,6 +5984,8 @@ function renderMyMatkad(){
       <div class="mm-card-actions">
         <button class="ibtn" onclick="openTrackingMap('${m.id}', '${escapeHtml(m.nimi||'').replace(/'/g,"\\'")}')">🗺️ Jälgi kaardil</button>
         <button class="ibtn" onclick="openMatkaChat('${m.id}','${escapeHtml(m.nimi||'').replace(/'/g,"\\'")}')">💬 Vestlus</button>
+        <button class="ibtn" onclick="openRiskiAnalyys('${m.id}')">⚠️ Risk</button>
+        ${isPast?`<button class="ibtn" onclick="openJarelRaport('${m.id}')">📋 Järelraport</button>`:''}
         ${m.kusitlus&&m.kusitlus.length>0?`<button class="ibtn" onclick="openVastusedKokkuvote('${m.id}')">📊 Vastused</button>`:''}
         ${!isPast?`<button class="ibtn" onclick="lopetaMatk('${m.id}')" style="color:var(--orange);border-color:rgba(154,78,0,0.3);">🏁 Lõpeta matk</button>`:''}
         <button class="ibtn" onclick="deleteMatk('${m.id}')" style="color:var(--red);border-color:rgba(220,38,38,0.3);">🗑 Kustuta</button>

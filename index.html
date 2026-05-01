@@ -702,6 +702,16 @@
 
 <!-- ISIKLIK STATISTIKA -->
 <div class="overlay" id="statsmodal">
+  <div class="modal vmodal">
+    <div class="modal-title">📊 Minu statistika</div>
+    <div id="stats-content" style="margin-top:8px;">
+      <div style="text-align:center;padding:30px;color:var(--text3);">⏳ Laen...</div>
+    </div>
+    <div class="mact">
+      <button class="btn btn-primary" onclick="closeStats()">Sulge</button>
+    </div>
+  </div>
+</div>
 
 <!-- HINNASTUS MODAL -->
 <div class="overlay" id="pricingmodal">
@@ -817,19 +827,20 @@
     </div>
   </div>
 </div>
-  <div class="modal vmodal">
-    <div class="modal-title">📊 Minu statistika</div>
-    <div id="stats-content" style="margin-top:8px;">
-      <div style="text-align:center;padding:30px;color:var(--text3);">⏳ Laen...</div>
-    </div>
-    <div class="mact">
-      <button class="btn btn-primary" onclick="closeStats()">Sulge</button>
-    </div>
-  </div>
-</div>
 
 <!-- EDETABEL -->
 <div class="overlay" id="edetabelmodal">
+  <div class="modal vmodal">
+    <div class="modal-title">🏆 Edetabel</div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;" id="edetabel-tabs">
+      <button class="btn btn-primary" id="edt-km" onclick="switchEdetabel('km')">📏 Km kokku</button>
+      <button class="btn" id="edt-soitu" onclick="switchEdetabel('soitu')">🚣 Sõite</button>
+      <button class="btn" id="edt-joged" onclick="switchEdetabel('joged')">🌊 Jõgesid</button>
+    </div>
+    <div id="edetabel-content"><div style="text-align:center;padding:20px;color:var(--text3);">⏳ Laen...</div></div>
+    <div class="mact"><button class="btn btn-primary" onclick="closeEdetabel()">Sulge</button></div>
+  </div>
+</div>
 
 <!-- AVALIK PROFIIL -->
 <div class="overlay" id="profiilmodal">
@@ -841,17 +852,6 @@
     <div class="mact">
       <button class="btn btn-primary" onclick="closeProfiil()">Sulge</button>
     </div>
-  </div>
-</div>
-  <div class="modal vmodal">
-    <div class="modal-title">🏆 Edetabel</div>
-    <div style="display:flex;gap:6px;margin-bottom:12px;" id="edetabel-tabs">
-      <button class="btn btn-primary" id="edt-km" onclick="switchEdetabel('km')">📏 Km kokku</button>
-      <button class="btn" id="edt-soitu" onclick="switchEdetabel('soitu')">🚣 Sõite</button>
-      <button class="btn" id="edt-joged" onclick="switchEdetabel('joged')">🌊 Jõgesid</button>
-    </div>
-    <div id="edetabel-content"><div style="text-align:center;padding:20px;color:var(--text3);">⏳ Laen...</div></div>
-    <div class="mact"><button class="btn btn-primary" onclick="closeEdetabel()">Sulge</button></div>
   </div>
 </div>
 
@@ -911,6 +911,16 @@
 
 <!-- ADMIN PANEEL -->
 <div class="overlay" id="adminmodal">
+  <div class="modal vmodal">
+    <div class="modal-title">🛠️ Admin paneel</div>
+    <div id="admin-content" style="margin-top:8px;">
+      <div style="text-align:center;padding:20px;color:var(--text3);">⏳ Laen...</div>
+    </div>
+    <div class="mact">
+      <button class="btn btn-primary" onclick="closeAdminPanel()">Sulge</button>
+    </div>
+  </div>
+</div>
 
 <!-- KÜSITLUSE VASTAMINE -->
 <div class="overlay" id="kusitlusvastamodal">
@@ -934,16 +944,6 @@
     </div>
     <div class="mact">
       <button class="btn btn-primary" onclick="closeVastusedKokkuvote()">Sulge</button>
-    </div>
-  </div>
-</div>
-  <div class="modal vmodal">
-    <div class="modal-title">🛠️ Admin paneel</div>
-    <div id="admin-content" style="margin-top:8px;">
-      <div style="text-align:center;padding:20px;color:var(--text3);">⏳ Laen...</div>
-    </div>
-    <div class="mact">
-      <button class="btn btn-primary" onclick="closeAdminPanel()">Sulge</button>
     </div>
   </div>
 </div>

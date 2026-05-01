@@ -2139,7 +2139,7 @@ function renderLoik(l){
     const rm=l.raftMin??riverObj?.raftMin??jSt?.raftMin;
     const ms=l.maxSafe??riverObj?.maxSafe??jSt?.maxSafe;
     const am=l.absMax??riverObj?.absMax??jSt?.absMax;
-    const cur=jSt?.level;
+    const cur=riverObj?.level??jSt?.level;
     if(km!=null||rm!=null||ms!=null||am!=null){
       // Visuaalne riba: kus praegune tase asub vahemikus
       const minRange=Math.min(...[km,rm,ms,am,cur].filter(v=>v!=null));

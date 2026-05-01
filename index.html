@@ -538,8 +538,18 @@
       </div>
       <div id="c-input-row" style="display:none;">
         <textarea id="c-text" placeholder="Kirjuta sõnum... (nt 'Sõitsin täna, vesi on hea')" maxlength="1000" rows="2"></textarea>
+        <div id="c-foto-preview" style="display:none;margin-top:6px;position:relative;">
+          <img id="c-foto-img" style="max-height:100px;border-radius:8px;border:1px solid var(--border);object-fit:cover;" alt=""/>
+          <button onclick="clearChatFotoJogi()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:12px;">✕</button>
+        </div>
         <div class="c-input-foot">
-          <span id="c-counter" class="c-counter">0/1000</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span id="c-counter" class="c-counter">0/1000</span>
+            <label style="cursor:pointer;padding:4px 8px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text2);font-size:12px;" title="Lisa foto">
+              📷
+              <input type="file" id="c-foto-input" accept="image/*" style="display:none;" onchange="previewChatFotoJogi(this)"/>
+            </label>
+          </div>
           <button class="btn btn-primary" id="c-send-btn" onclick="sendMessage()">📤 Saada</button>
         </div>
       </div>
@@ -893,10 +903,33 @@
     </div>
     <div id="matkachat-compose">
       <textarea id="matkachat-text" rows="2" maxlength="500" placeholder="Kirjuta sõnum..." style="width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:none;"></textarea>
-      <div style="display:flex;justify-content:flex-end;margin-top:6px;gap:8px;">
-        <button class="btn" onclick="closeMatkaChatModal()">Sulge</button>
-        <button class="btn btn-primary" onclick="sendMatkaChat()">📤 Saada</button>
+      <div id="matkachat-foto-preview" style="display:none;margin-top:6px;position:relative;display:none;">
+        <img id="matkachat-foto-img" style="max-height:120px;border-radius:8px;border:1px solid var(--border);object-fit:cover;" alt=""/>
+        <button onclick="clearChatFoto()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">✕</button>
       </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px;">
+        <label style="cursor:pointer;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text2);font-size:12px;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:5px;" title="Lisa foto">
+          📷
+          <input type="file" id="matkachat-foto-input" accept="image/*" style="display:none;" onchange="previewChatFoto(this)"/>
+        </label>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" onclick="closeMatkaChatModal()">Sulge</button>
+          <button class="btn btn-primary" onclick="sendMatkaChat()">📤 Saada</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EELKÜSITLUS OSALEJATELE -->
+<div class="overlay" id="eelkusitlusmodal">
+  <div class="modal vmodal" style="max-width:520px;">
+    <div class="modal-title">📋 Eelküsitlus osalejatele</div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.5;">Saada osalejatele küsitlus enne matka algust — kogemus, varustus, ootused.</p>
+    <div id="eelkusitlus-content"></div>
+    <div class="mact">
+      <button class="btn" onclick="closeEelKusitlus()">Sulge</button>
+      <button class="btn btn-primary" onclick="saadaEelKusitlus()">📤 Saada osalejatele</button>
     </div>
   </div>
 </div>
@@ -1496,6 +1529,8 @@ async function refreshAll(){
   }
   busy=false;btn.disabled=false;btn.textContent='↻ Uuenda';
   render();
+  // Push teavituste kontroll pärast andmete laadimist
+  checkPushAlerts();
 }
 
 function st(r){
@@ -1570,6 +1605,7 @@ function renderCard(r){
       <span class="foot-src"><span class="fdot live"></span>KA · ${fmt(r.updated)}</span>
       <div class="foot-btns">
         <button class="ibtn" onclick="toggleLemmik('${r.id}')" title="Lemmik" style="color:${isLemmik(r.id)?'#e11d48':'var(--text3)'};">${isLemmik(r.id)?'❤️':'🤍'}</button>
+        ${getPushBtn(r)}
         <button class="ibtn" onclick="tog('${r.id}')">${ed?'✕':'⚙'}</button>
         <button class="ibtn" onclick="del('${r.id}')">🗑</button>
       </div>
@@ -3646,6 +3682,264 @@ function stripeCheckout(planId){
 
 function getUserTier(){ return window.myUserTier||'free'; }
 
+// =============== #28 ONBOARDING ===============
+
+const SK_ONBOARDED='rv9_onboarded';
+const ONBOARDING_STEPS=[
+  {icon:'🌊',pealkiri:'Tere tulemast Veeretkedele!',tekst:'Eesti ja Läti jõgede reaalajas veetasemed — planeeri matka ohutult ja leidke parim aeg sõiduks.'},
+  {icon:'📊',pealkiri:'Veetaseme jälgimine',tekst:'Iga jõe kaart näitab praegust veetaset, 24h muutust ja seisundi hinnangut — roheline tähendab head aega sõiduks.'},
+  {icon:'🗺️',pealkiri:'Jõelõigud ja kaart',tekst:'Vajuta jõe kaardil "Veepeale" et näha lõike koos GPS navigatsiooniga. "Lõigud" nupust saad kõiki lõike korraga sirvi.'},
+  {icon:'⛵',pealkiri:'Matkajuhi tööriistad',tekst:'Premium kasutajad saavad luua matku, jagada GPS linki klientidele ja hallata osalejaid reaalajas. Logi sisse et alustada!'},
+];
+
+let onboardingStep=0;
+
+function checkOnboarding(){
+  if(localStorage.getItem(SK_ONBOARDED))return;
+  setTimeout(showOnboarding, 800);
+}
+
+function showOnboarding(){
+  if(document.getElementById('onboardingmodal'))return;
+  const el=document.createElement('div');
+  el.className='overlay open';
+  el.id='onboardingmodal';
+  el.style.zIndex='99999';
+  el.innerHTML=`<div style="background:var(--surface);border-radius:20px;border:1px solid var(--border);padding:28px 24px;width:360px;max-width:93vw;box-shadow:var(--shadow-lg);text-align:center;">
+    <div id="ob-step-dots" style="display:flex;justify-content:center;gap:6px;margin-bottom:20px;">
+      ${ONBOARDING_STEPS.map((_,i)=>`<div class="ob-dot" data-i="${i}" style="width:8px;height:8px;border-radius:50%;background:${i===0?'var(--accent)':'var(--border)'};transition:background .2s;cursor:pointer;" onclick="goObStep(${i})"></div>`).join('')}
+    </div>
+    <div id="ob-content"></div>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button id="ob-skip" onclick="closeOnboarding()" style="flex:1;padding:10px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;">Jäta vahele</button>
+      <button id="ob-next" onclick="nextObStep()" style="flex:2;padding:10px;border-radius:9px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;">Edasi →</button>
+    </div>
+  </div>`;
+  document.body.appendChild(el);
+  onboardingStep=0;
+  renderObStep(0);
+}
+
+function renderObStep(i){
+  const s=ONBOARDING_STEPS[i];
+  document.getElementById('ob-content').innerHTML=`
+    <div style="font-size:52px;margin-bottom:14px;">${s.icon}</div>
+    <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:10px;letter-spacing:-0.3px;">${s.pealkiri}</div>
+    <div style="font-size:13px;color:var(--text2);line-height:1.6;">${s.tekst}</div>`;
+  document.querySelectorAll('.ob-dot').forEach((d,idx)=>{
+    d.style.background=idx===i?'var(--accent)':'var(--border)';
+  });
+  const isLast=i===ONBOARDING_STEPS.length-1;
+  document.getElementById('ob-next').textContent=isLast?'✅ Alustame!':'Edasi →';
+}
+
+function nextObStep(){
+  if(onboardingStep<ONBOARDING_STEPS.length-1){
+    onboardingStep++;
+    renderObStep(onboardingStep);
+  } else {
+    closeOnboarding();
+  }
+}
+
+function goObStep(i){onboardingStep=i;renderObStep(i);}
+
+function closeOnboarding(){
+  localStorage.setItem(SK_ONBOARDED,'1');
+  const el=document.getElementById('onboardingmodal');
+  if(el){el.style.opacity='0';el.style.transition='opacity .3s';setTimeout(()=>el.remove(),300);}
+}
+
+// =============== #23 PUSH TEAVITUSED ===============
+
+const SK_PUSH_PREFS='rv9_push_prefs'; // {jogiid: targetLevel}
+let pushSubscription=null;
+
+async function requestPushPermission(){
+  if(!('Notification' in window)||!('serviceWorker' in navigator)){
+    showToast('Push teavitused pole toetatud selles brauseris');
+    return false;
+  }
+  const permission=await Notification.requestPermission();
+  if(permission!=='granted'){
+    showToast('Push teavitused keelati');
+    return false;
+  }
+  showToast('✅ Push teavitused lubatud!');
+  return true;
+}
+
+// Push teavituse nupp kaardi footis
+function getPushBtn(river){
+  if(!('Notification' in window))return '';
+  const prefs=getPushPrefs();
+  const hasAlert=prefs[river.jogi]!=null;
+  return `<button class="ibtn" title="${hasAlert?'Teavitus seadistatud — vajuta muutmiseks':'Seadista veetaseme teavitus'}" onclick="openPushSeadistus('${escapeHtml(river.jogi).replace(/'/g,"\\'")}',${river.level||0},${river.kayakMin||40},${river.maxSafe||200})" style="${hasAlert?'color:var(--accent);border-color:var(--accent);':''}">🔔${hasAlert?'✓':''}</button>`;
+}
+
+function getPushPrefs(){
+  try{return JSON.parse(localStorage.getItem(SK_PUSH_PREFS)||'{}');}catch(e){return{};}
+}
+
+function openPushSeadistus(jogi, currentLevel, kayakMin, maxSafe){
+  const prefs=getPushPrefs();
+  const current=prefs[jogi];
+  const html=`<div style="padding:16px;">
+    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🔔 Veetaseme teavitus</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px;">${escapeHtml(jogi)} · praegu <b>${currentLevel} cm</b></div>
+    <div style="margin-bottom:12px;">
+      <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">Teavita kui vesi jõuab (cm)</label>
+      <input type="number" id="push-target" value="${current||kayakMin}" min="0" max="500" style="width:100%;font-size:16px;padding:10px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;text-align:center;"/>
+    </div>
+    <div style="display:flex;gap:6px;font-size:11px;color:var(--text3);margin-bottom:14px;flex-wrap:wrap;">
+      <span style="cursor:pointer;padding:3px 8px;background:var(--green-bg);border-radius:5px;color:var(--green);" onclick="document.getElementById('push-target').value=${kayakMin}">Kajak min: ${kayakMin}</span>
+      <span style="cursor:pointer;padding:3px 8px;background:var(--bg);border-radius:5px;" onclick="document.getElementById('push-target').value=${Math.round((kayakMin+maxSafe)/2)}">Optimaalne: ${Math.round((kayakMin+maxSafe)/2)}</span>
+    </div>
+    <button onclick="savePushSeadistus('${escapeHtml(jogi)}')" class="btn btn-primary" style="width:100%;margin-bottom:8px;">💾 Salvesta teavitus</button>
+    ${current!=null?`<button onclick="deletePushSeadistus('${escapeHtml(jogi)}')" style="width:100%;padding:8px;border-radius:8px;border:1px solid rgba(220,38,38,0.3);background:transparent;color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;">🗑 Eemalda teavitus</button>`:''}
+  </div>`;
+  // Näita väikeses popoveris
+  const existing=document.getElementById('push-popover');
+  if(existing)existing.remove();
+  const pop=document.createElement('div');
+  pop.id='push-popover';
+  pop.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-lg);z-index:10001;min-width:280px;max-width:340px;';
+  pop.innerHTML=html+'<button onclick="document.getElementById(\'push-popover\').remove()" style="position:absolute;top:10px;right:12px;background:transparent;border:none;font-size:18px;cursor:pointer;color:var(--text3);">✕</button>';
+  document.body.appendChild(pop);
+}
+
+async function savePushSeadistus(jogi){
+  const val=parseInt(document.getElementById('push-target')?.value)||0;
+  if(val<=0){alert('Sisesta kehtiv veetase');return;}
+  const granted=Notification.permission==='granted'||await requestPushPermission();
+  if(!granted)return;
+  const prefs=getPushPrefs();
+  prefs[jogi]=val;
+  localStorage.setItem(SK_PUSH_PREFS,JSON.stringify(prefs));
+  document.getElementById('push-popover')?.remove();
+  showToast(`🔔 Teavitus seadistatud: ${jogi} ≥ ${val} cm`);
+  render(); // Uuenda kaardid
+}
+
+function deletePushSeadistus(jogi){
+  const prefs=getPushPrefs();
+  delete prefs[jogi];
+  localStorage.setItem(SK_PUSH_PREFS,JSON.stringify(prefs));
+  document.getElementById('push-popover')?.remove();
+  showToast('Teavitus eemaldatud');
+  render();
+}
+
+// Kontrolli teavitusi pärast andmete laadimist
+function checkPushAlerts(){
+  if(Notification.permission!=='granted')return;
+  const prefs=getPushPrefs();
+  const SK_NOTIFIED='rv9_push_notified';
+  let notified={};
+  try{notified=JSON.parse(localStorage.getItem(SK_NOTIFIED)||'{}');}catch(e){}
+  const now=Date.now();
+  allSt.forEach(s=>{
+    if(!s.jogi||s.level==null)return;
+    const target=prefs[s.jogi];
+    if(target==null)return;
+    const lastNotif=notified[s.jogi]||0;
+    if(s.level>=target&&(now-lastNotif)>3*3600*1000){ // max 1 kord 3h
+      new Notification(`🌊 ${s.jogi} — vesi sobiv!`,{
+        body:`Praegune veetase ${s.level} cm (seadistatud: ${target} cm). Hea aeg sõiduks!`,
+        icon:'icons/icon-192.png',
+        tag:'veetase-'+s.jogi
+      });
+      notified[s.jogi]=now;
+    }
+  });
+  localStorage.setItem(SK_NOTIFIED,JSON.stringify(notified));
+}
+
+// =============== #25 FOTOD VESTLUSES ===============
+
+let chatFotoFile=null;
+
+function previewChatFoto(input){
+  if(!input.files||!input.files[0])return;
+  chatFotoFile=input.files[0];
+  const url=URL.createObjectURL(chatFotoFile);
+  const preview=document.getElementById('matkachat-foto-preview');
+  const img=document.getElementById('matkachat-foto-img');
+  if(preview&&img){img.src=url;preview.style.display='block';}
+}
+
+function clearChatFoto(){
+  chatFotoFile=null;
+  const preview=document.getElementById('matkachat-foto-preview');
+  const input=document.getElementById('matkachat-foto-input');
+  if(preview)preview.style.display='none';
+  if(input)input.value='';
+}
+
+// =============== #45 EELKÜSITLUS OSALEJATELE ===============
+
+const EELKUSITLUS_KYSIMUSED=[
+  {id:'kogemus',kysimus:'Milline on sinu kogemus kanuusõidus?',valikud:['Puudub — esimene kord','Mõni kord sõitnud','Regulaarselt sõidan','Kogenud sõitja']},
+  {id:'konditsion',kysimus:'Milline on sinu füüsiline konditsion?',valikud:['Hea — harrastan sporti','Rahuldav — jalutame regulaarselt','Nõrk — liikun vähe','Erivajadus — palun täpsusta kommentaaris']},
+  {id:'varustus',kysimus:'Kas sul on isiklik varustus?',valikud:['Päästevest ja kiiver olemas','Ainult päästevest','Varustus puudub — vajan laenamiseks','Osaline varustus']},
+  {id:'ootused',kysimus:'Millised on sinu ootused matkale?',valikud:['Lõõgastumine ja loodus','Seiklus ja põnevus','Perepuhkus','Sport ja aktiivsus']},
+  {id:'tervis',kysimus:'Kas on terviseprobleeme millest peaksime teadma?',valikud:['Ei ole','Ujumisoskus puudub','Allergia / ravimid olemas','Muu — täpsustamine komentaaris']},
+];
+
+let activeEelKusitlusMatkaId=null;
+
+async function openEelKusitlus(matkaId){
+  document.getElementById('mmmodal').classList.remove('open');
+  activeEelKusitlusMatkaId=matkaId;
+  document.getElementById('eelkusitlusmodal').classList.add('open');
+  // Lae olemasolevad vastused
+  const el=document.getElementById('eelkusitlus-content');
+  el.innerHTML=renderEelKusitlusForm();
+}
+
+function closeEelKusitlus(){
+  document.getElementById('eelkusitlusmodal').classList.remove('open');
+  document.getElementById('mmmodal').classList.add('open');
+  activeEelKusitlusMatkaId=null;
+}
+
+function renderEelKusitlusForm(){
+  let html='<div style="display:flex;flex-direction:column;gap:12px;">';
+  EELKUSITLUS_KYSIMUSED.forEach((q,qi)=>{
+    html+=`<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">${qi+1}. ${escapeHtml(q.kysimus)}</div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        ${q.valikud.map((v,vi)=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:5px 8px;border-radius:6px;border:1px solid transparent;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+          <input type="radio" name="eelk-${q.id}" value="${vi}" style="accent-color:var(--accent);flex-shrink:0;"/>
+          ${escapeHtml(v)}
+        </label>`).join('')}
+      </div>
+    </div>`;
+  });
+  html+=`<div class="mrow"><label>Lisainfo / kommentaar (valikuline)</label>
+    <textarea id="eelk-kommentaar" rows="2" maxlength="300" placeholder="Kirjuta siia täpsustused..." style="font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:100%;resize:none;"></textarea>
+  </div></div>`;
+  return html;
+}
+
+async function saadaEelKusitlus(){
+  if(!activeEelKusitlusMatkaId||!currentUser||!window.fb)return;
+  // Kontrolli et matkal on osalejaid
+  const fb=window.fb;
+  // Salvesta küsitlus matka külge
+  try{
+    const kysimused=EELKUSITLUS_KYSIMUSED.map(q=>({id:q.id,kysimus:q.kysimus,valikud:q.valikud}));
+    await fb.updateDoc(fb.doc(fb.db,'matkad',activeEelKusitlusMatkaId),{
+      eelkusitlus:kysimused,
+      eelkusitlusSaadetud:fb.serverTimestamp()
+    });
+    showToast('✅ Eelküsitlus salvestatud! Osalejad näevad seda liitumisel.');
+    closeEelKusitlus();
+  }catch(err){
+    alert('Viga salvestamisel: '+err.message);
+  }
+}
+
 // =============== LÕIGU REKLAAM ===============
 
 let myReklaami=null; // Kasutaja aktiivne reklaam
@@ -4544,7 +4838,10 @@ function renderMatkaChatMessages(msgs){
       ${photo}
       <div class="c-msg-body">
         <div class="c-msg-head"><span class="c-msg-name">${escapeHtml(m.name||'?')}</span><span class="c-msg-time">${time}</span></div>
-        <div class="c-msg-text">${escapeHtml(m.text||'')}</div>
+        <div class="c-msg-text">
+          ${m.text?escapeHtml(m.text):''}
+          ${m.fotoUrl?`<div style="margin-top:${m.text?'6px':'0'}"><img src="${escapeHtml(m.fotoUrl)}" style="max-width:200px;max-height:200px;border-radius:8px;object-fit:cover;cursor:pointer;display:block;" onclick="window.open('${escapeHtml(m.fotoUrl)}','_blank')" alt="foto"/></div>`:''}
+        </div>
       </div>
     </div>`;
   });
@@ -4556,17 +4853,38 @@ async function sendMatkaChat(){
   if(!currentUser||!activeMatkaChatId||!window.fb)return;
   const input=document.getElementById('matkachat-text');
   const text=input.value.trim();
-  if(!text)return;
+  if(!text&&!chatFotoFile)return;
   const fb=window.fb;
+  let fotoUrl=null;
+  // Lae foto üles kui on
+  if(chatFotoFile){
+    try{
+      const btn=document.querySelector('#matkachat-compose .btn-primary');
+      if(btn){btn.textContent='⏳ Laen...';btn.disabled=true;}
+      const ext=chatFotoFile.name.split('.').pop()||'jpg';
+      const ref=fb.storageRef(fb.storage,`matkaChatFotod/${activeMatkaChatId}/${Date.now()}.${ext}`);
+      await fb.uploadBytes(ref,chatFotoFile);
+      fotoUrl=await fb.getDownloadURL(ref);
+    }catch(err){
+      alert('Foto üleslaadimine ebaõnnestus: '+err.message);
+      const btn=document.querySelector('#matkachat-compose .btn-primary');
+      if(btn){btn.textContent='📤 Saada';btn.disabled=false;}
+      return;
+    }
+  }
   try{
     await fb.addDoc(fb.collection(fb.db,'matkad',activeMatkaChatId,'chat'),{
-      text, uid:currentUser.uid,
+      text:text||null, fotoUrl:fotoUrl||null,
+      uid:currentUser.uid,
       name:currentUser.displayName||currentUser.email||'Kasutaja',
       photoURL:currentUser.photoURL||null,
       ts:fb.serverTimestamp()
     });
     input.value='';
+    clearChatFoto();
   }catch(err){alert('Saatmine ebaõnnestus: '+err.message);}
+  const btn=document.querySelector('#matkachat-compose .btn-primary');
+  if(btn){btn.textContent='📤 Saada';btn.disabled=false;}
 }
 
 // =============== KÕIK LÕIGUD ===============
@@ -6002,6 +6320,7 @@ function renderMyMatkad(){
         <button class="ibtn" onclick="openTrackingMap('${m.id}', '${escapeHtml(m.nimi||'').replace(/'/g,"\\'")}')">🗺️ Jälgi kaardil</button>
         <button class="ibtn" onclick="openMatkaChat('${m.id}','${escapeHtml(m.nimi||'').replace(/'/g,"\\'")}')">💬 Vestlus</button>
         <button class="ibtn" onclick="openRiskiAnalyys('${m.id}')">⚠️ Risk</button>
+        ${!isPast?`<button class="ibtn" onclick="openEelKusitlus('${m.id}')">📋 Eelküsitlus</button>`:''}
         ${isPast?`<button class="ibtn" onclick="openJarelRaport('${m.id}')">📋 Järelraport</button>`:''}
         ${m.kusitlus&&m.kusitlus.length>0?`<button class="ibtn" onclick="openVastusedKokkuvote('${m.id}')">📊 Vastused</button>`:''}
         ${!isPast?`<button class="ibtn" onclick="lopetaMatk('${m.id}')" style="color:var(--orange);border-color:rgba(154,78,0,0.3);">🏁 Lõpeta matk</button>`:''}
@@ -6921,7 +7240,10 @@ function renderMessages(msgs){
           <span class="c-msg-name">${escapeHtml(m.name||'Kasutaja')}</span>
           <span class="c-msg-time">${time}</span>
         </div>
-        <div class="c-msg-text">${escapeHtml(m.text||'')}</div>
+        <div class="c-msg-text">
+          ${m.text?escapeHtml(m.text):''}
+          ${m.fotoUrl?`<div style="margin-top:${m.text?'6px':'0'}"><img src="${escapeHtml(m.fotoUrl)}" style="max-width:200px;max-height:180px;border-radius:8px;object-fit:cover;cursor:pointer;display:block;" onclick="window.open('${escapeHtml(m.fotoUrl)}','_blank')" alt="foto"/></div>`:''}
+        </div>
         ${reactHtml}
         ${actionsHtml}
       </div>
@@ -6932,36 +7254,63 @@ function renderMessages(msgs){
 }
 
 // Saada uus sõnum
+let chatFotoFileJogi=null;
+
+function previewChatFotoJogi(input){
+  if(!input.files||!input.files[0])return;
+  chatFotoFileJogi=input.files[0];
+  const preview=document.getElementById('c-foto-preview');
+  const img=document.getElementById('c-foto-img');
+  if(preview&&img){img.src=URL.createObjectURL(chatFotoFileJogi);preview.style.display='block';}
+}
+
+function clearChatFotoJogi(){
+  chatFotoFileJogi=null;
+  const p=document.getElementById('c-foto-preview');
+  const i=document.getElementById('c-foto-input');
+  if(p)p.style.display='none';
+  if(i)i.value='';
+}
+
 async function sendMessage(){
-  if(!currentUser){
-    alert('Logi sisse, et sõnumit saata');
-    return;
-  }
+  if(!currentUser){alert('Logi sisse, et sõnumit saata');return;}
   const input=document.getElementById('c-text');
   const text=input.value.trim();
-  if(!text)return;
-  if(text.length>1000){
-    alert('Sõnum on liiga pikk (maks 1000 tähemärki)');
-    return;
-  }
+  if(!text&&!chatFotoFileJogi)return;
+  if(text.length>1000){alert('Sõnum on liiga pikk (maks 1000 tähemärki)');return;}
   if(!activeChatRiver)return;
   const btn=document.getElementById('c-send-btn');
-  btn.disabled=true;
-  btn.textContent='Saadan...';
+  btn.disabled=true;btn.textContent='⏳...';
+  let fotoUrl=null;
+  if(chatFotoFileJogi){
+    try{
+      const fb=window.fb;
+      const ext=chatFotoFileJogi.name.split('.').pop()||'jpg';
+      const ref=fb.storageRef(fb.storage,`chatFotod/${activeChatRiver}/${Date.now()}.${ext}`);
+      await fb.uploadBytes(ref,chatFotoFileJogi);
+      fotoUrl=await fb.getDownloadURL(ref);
+    }catch(err){
+      alert('Foto üleslaadimine ebaõnnestus: '+err.message);
+      btn.disabled=false;btn.textContent='📤 Saada';
+      return;
+    }
+  }
   try{
     const fb=window.fb;
-    await fb.addDoc(fb.collection(fb.db, 'messages'), {
-      jogi: activeChatRiver,
-      text: text,
-      uid: currentUser.uid,
-      name: currentUser.displayName||currentUser.email||'Kasutaja',
-      photoURL: currentUser.photoURL||null,
-      ts: fb.serverTimestamp()
+    await fb.addDoc(fb.collection(fb.db,'messages'),{
+      jogi:activeChatRiver,
+      text:text||null,
+      fotoUrl:fotoUrl||null,
+      uid:currentUser.uid,
+      name:currentUser.displayName||currentUser.email||'Kasutaja',
+      photoURL:currentUser.photoURL||null,
+      ts:fb.serverTimestamp()
     });
     input.value='';
+    clearChatFotoJogi();
     updateCharCounter();
   }catch(err){
-    console.error('Sõnumi saatmine ebaõnnestus:', err);
+    console.error('Sõnumi saatmine ebaõnnestus:',err);
     alert('Sõnumi saatmine ebaõnnestus: '+(err.message||err.code||'tundmatu viga'));
   }finally{
     btn.disabled=false;
@@ -7819,6 +8168,8 @@ async function submitJoin(){
 async function init(){
   // Kontrolli, kas URL sisaldab ?join= parameetrit (matka liitumine)
   checkJoinCode();
+  // Onboarding esmakordsele kasutajale
+  checkOnboarding();
   // 1) Laadi vaikimisi nimekiri Sheetsist (jookseb paralleelselt veetasemete laadimisega)
   // 2) Laadi veetasemed
   document.getElementById('stxt').textContent='Laen vaikimisi nimekirja ja veetasemeid...';

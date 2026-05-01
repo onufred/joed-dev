@@ -2134,10 +2134,11 @@ function renderLoik(l){
   // Veetaseme piiride kast — nähtav koheselt lõigu vaates
   {
     const jSt=selSt||allSt.find(s=>s.jogi===l.jogi);
-    const km=l.kayakMin??jSt?.kayakMin;
-    const rm=l.raftMin??jSt?.raftMin;
-    const ms=l.maxSafe??jSt?.maxSafe;
-    const am=l.absMax??jSt?.absMax;
+    const riverObj=rivers.find(r=>r.jogi===l.jogi);
+    const km=l.kayakMin??riverObj?.kayakMin??jSt?.kayakMin;
+    const rm=l.raftMin??riverObj?.raftMin??jSt?.raftMin;
+    const ms=l.maxSafe??riverObj?.maxSafe??jSt?.maxSafe;
+    const am=l.absMax??riverObj?.absMax??jSt?.absMax;
     const cur=jSt?.level;
     if(km!=null||rm!=null||ms!=null||am!=null){
       // Visuaalne riba: kus praegune tase asub vahemikus
@@ -2171,13 +2172,9 @@ function renderLoik(l){
             <div style="font-size:9px;font-weight:600;color:#2563eb;text-transform:uppercase;letter-spacing:0.4px;">🛶 Rafting min</div>
             <div style="font-size:14px;font-weight:700;color:#2563eb;font-family:'DM Mono',monospace;">${rm} cm</div>
           </div>`:''}
-          ${ms!=null?`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:6px 10px;">
-            <div style="font-size:9px;font-weight:600;color:#d97706;text-transform:uppercase;letter-spacing:0.4px;">⚠️ Max ohutu</div>
-            <div style="font-size:14px;font-weight:700;color:#d97706;font-family:'DM Mono',monospace;">${ms} cm</div>
-          </div>`:''}
-          ${am!=null?`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:6px 10px;">
-            <div style="font-size:9px;font-weight:600;color:#dc2626;text-transform:uppercase;letter-spacing:0.4px;">🚫 Abs max</div>
-            <div style="font-size:14px;font-weight:700;color:#dc2626;font-family:'DM Mono',monospace;">${am} cm</div>
+          ${cur!=null?`<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;">
+            <div style="font-size:9px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;">💧 Praegu</div>
+            <div style="font-size:14px;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace;">${cur} cm</div>
           </div>`:''}
         </div>
       </div>`;

@@ -2156,7 +2156,7 @@ function renderLoik(l){
     const navUrl=`https://www.google.com/maps/dir/?api=1&destination=${l.algus[0]},${l.algus[1]}&travelmode=driving`;
     html+=`<a href="${navUrl}" target="_blank" rel="noopener" class="vp-btn" style="text-decoration:none;">🧭 Navigeeri</a>`;
   }
-  html+=`<button class="vp-btn" style="margin-left:auto;" onclick="openGraph('${(l.jogi||'').replace(/'/g,"\\\\'")}', ${l.algus?l.algus[0]:'null'}, ${l.algus?l.algus[1]:'null'})">📊 Graafik</button>`;
+  html+=`<button class="vp-btn" style="margin-left:auto;" onclick="openGraph('${(l.jogi||'').replace(/'/g,"\\\\'")}', ${l.algus?l.algus[0]:'null'}, ${l.algus?l.algus[1]:'null'}, ${JSON.stringify({id:l.id,nimi:l.nimi,kayakMin:l.kayakMin,raftMin:l.raftMin,maxSafe:l.maxSafe,absMax:l.absMax}).replace(/"/g,'&quot;')})">📊 Graafik</button>`;
   if(currentUser)html+=`<button class="vp-btn" onclick="openRaport('${(l.jogi||'').replace(/'/g,"\\\\'")}','${(l.nimi||'').replace(/'/g,"\\\\'")}')">📝 Raport</button>`;
   html+=`<button class="vp-btn" onclick="toggleLoikSp('${l.id}')" title="Seadista veetaseme piirid">⚙️</button>`;
   html+='</div>';
@@ -2275,13 +2275,14 @@ function renderWeather(w){
 
 // =============== GRAAFIK MODAL ===============
 
-async function openGraph(jogi, lat, lng){
-  document.getElementById('g-title').textContent='📊 '+jogi;
-  document.getElementById('g-sub').textContent='Veetase, ilm ja sajud';
+async function openGraph(jogi, lat, lng, loik){
+  document.getElementById('g-title').textContent='📊 '+(loik?.nimi||jogi);
+  document.getElementById('g-sub').textContent=loik?`${jogi} · lõigu veetaseme piirid`:'Veetase, ilm ja sajud';
   document.getElementById('g-content').innerHTML='⏳ Laen andmeid...';
   document.getElementById('gmodal').classList.add('open');
-  // Leia jõgi rivers-ist (ajaloo jaoks)
-  const r=rivers.find(rr=>rr.jogi===jogi);
+  // Leia jõgi rivers-ist või allSt-ist (ajaloo jaoks)
+  let r=rivers.find(rr=>rr.jogi===jogi);
+  if(!r){r=allSt.find(s=>s.jogi===jogi);}
   // Lae kõik vajalik paralleelselt
   const [w, hist]=await Promise.all([
     (lat&&lng)?fetchWeather(lat, lng):Promise.resolve(null),
@@ -2289,10 +2290,8 @@ async function openGraph(jogi, lat, lng){
   ]);
   // Leia ajalugu sellele jõele
   let history=[];
-  if(r){
-    history=getHistoryFor(r);
-  }
-  renderGraph(w, history, r);
+  if(r){history=getHistoryFor(r);}
+  renderGraph(w, history, r, loik);
   // Lisa veetaseme prognoos graafiku alla
   if(r)setTimeout(()=>renderRiverPrognoos(r, document.getElementById('g-content')),200);
 }
@@ -2301,10 +2300,16 @@ function closeGraph(){
   document.getElementById('gmodal').classList.remove('open');
 }
 
-function renderGraph(w, history, river){
+function renderGraph(w, history, river, loik){
   const el=document.getElementById('g-content');
   if(!el)return;
   let html='';
+
+  // Kasuta lõigu piire kui on, muidu jõe omad
+  const kayakMin=loik?.kayakMin??river?.kayakMin;
+  const raftMin=loik?.raftMin??river?.raftMin;
+  const maxSafe=loik?.maxSafe??river?.maxSafe;
+  const absMax=loik?.absMax??river?.absMax;
 
   // 1) Veetaseme ajaloo graafik
   if(history&&history.length>=2){
@@ -2313,19 +2318,47 @@ function renderGraph(w, history, river){
     const days=Math.round((last.ts-first.ts)/(24*3600*1000));
     const minLvl=Math.min(...history.map(h=>h.lvl));
     const maxLvl=Math.max(...history.map(h=>h.lvl));
-    const range=Math.max(5, maxLvl-minLvl);
+    // Laienda vahemikku et mahuksid ka piirid
+    const allLevels=[minLvl,maxLvl];
+    if(kayakMin)allLevels.push(kayakMin);
+    if(maxSafe)allLevels.push(maxSafe);
+    if(absMax)allLevels.push(absMax);
+    const visMin=Math.min(...allLevels)-5;
+    const visMax=Math.max(...allLevels)+5;
+    const range=Math.max(5, visMax-visMin);
     const w0=600, h0=120;
+    const toY=(lvl)=>(h0-((lvl-visMin)/range)*(h0-20)-10);
     let path='', dots='';
     for(let i=0;i<history.length;i++){
       const x=(i/(history.length-1||1))*w0;
-      const y=h0-((history[i].lvl-minLvl)/range)*(h0-20)-10;
+      const y=toY(history[i].lvl);
       path+=(i===0?'M':' L')+x.toFixed(1)+','+y.toFixed(1);
-      // Punkt iga 5. näit
       if(i%Math.max(1, Math.floor(history.length/15))===0||i===history.length-1){
         dots+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="#2d5a3d"/>`;
       }
     }
-    // Visuaalsed sõlmed: praegune tase, min/max
+    // Piirijooned
+    let thresholdLines='';
+    if(kayakMin!=null&&kayakMin>visMin&&kayakMin<visMax){
+      const y=toY(kayakMin).toFixed(1);
+      thresholdLines+=`<line x1="0" y1="${y}" x2="${w0}" y2="${y}" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.8"/>
+        <text x="4" y="${Math.max(8,parseFloat(y)-3)}" font-size="9" fill="#16a34a" font-family="DM Mono,monospace">K min ${kayakMin}cm</text>`;
+    }
+    if(raftMin!=null&&raftMin>visMin&&raftMin<visMax&&raftMin!==kayakMin){
+      const y=toY(raftMin).toFixed(1);
+      thresholdLines+=`<line x1="0" y1="${y}" x2="${w0}" y2="${y}" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.8"/>
+        <text x="4" y="${Math.max(8,parseFloat(y)-3)}" font-size="9" fill="#2563eb" font-family="DM Mono,monospace">R min ${raftMin}cm</text>`;
+    }
+    if(maxSafe!=null&&maxSafe>visMin&&maxSafe<visMax){
+      const y=toY(maxSafe).toFixed(1);
+      thresholdLines+=`<line x1="0" y1="${y}" x2="${w0}" y2="${y}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.8"/>
+        <text x="4" y="${Math.max(8,parseFloat(y)-3)}" font-size="9" fill="#f59e0b" font-family="DM Mono,monospace">Max ohutu ${maxSafe}cm</text>`;
+    }
+    if(absMax!=null&&absMax>visMin&&absMax<visMax){
+      const y=toY(absMax).toFixed(1);
+      thresholdLines+=`<line x1="0" y1="${y}" x2="${w0}" y2="${y}" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.9"/>
+        <text x="4" y="${Math.max(8,parseFloat(y)-3)}" font-size="9" fill="#dc2626" font-family="DM Mono,monospace">Abs max ${absMax}cm</text>`;
+    }
     const trend=last.lvl-first.lvl;
     const trendIcon=trend>2?'📈':(trend<-2?'📉':'➡️');
     const trendText=trend>0?`+${trend} cm`:`${trend} cm`;
@@ -2333,6 +2366,7 @@ function renderGraph(w, history, river){
       <div class="g-section-title">📈 Veetase — viimased ${days} päeva ${trendIcon} <span style="color:${trend>0?'#1a6b4a':(trend<0?'#9a4e00':'#6b6660')};">${trendText}</span></div>
       <div class="g-water">
         <svg viewBox="0 0 ${w0} ${h0}" preserveAspectRatio="none" style="width:100%;height:120px;">
+          ${thresholdLines}
           <path d="${path}" stroke="#2d5a3d" stroke-width="2" fill="none"/>
           ${dots}
         </svg>
@@ -2348,6 +2382,12 @@ function renderGraph(w, history, river){
         <span><b>Kõrgeim:</b> ${maxLvl} cm</span>
         <span><b>Mõõdetud:</b> ${history.length} korda</span>
       </div>
+      ${thresholdLines?`<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:10px;font-family:'DM Mono',monospace;">
+        ${kayakMin!=null?`<span style="color:#16a34a;">— Kajak min ${kayakMin}cm</span>`:''}
+        ${raftMin!=null&&raftMin!==kayakMin?`<span style="color:#2563eb;">— Rafting min ${raftMin}cm</span>`:''}
+        ${maxSafe!=null?`<span style="color:#f59e0b;">— Max ohutu ${maxSafe}cm</span>`:''}
+        ${absMax!=null?`<span style="color:#dc2626;">— Absoluutne max ${absMax}cm</span>`:''}
+      </div>`:''}
     </div>`;
   } else if(history&&history.length===1){
     html+=`<div class="g-section">
@@ -3881,7 +3921,7 @@ function clearChatFoto(){
 const EELKUSITLUS_KYSIMUSED=[
   {id:'kogemus',kysimus:'Milline on sinu kogemus kanuusõidus?',valikud:['Puudub — esimene kord','Mõni kord sõitnud','Regulaarselt sõidan','Kogenud sõitja']},
   {id:'konditsion',kysimus:'Milline on sinu füüsiline konditsion?',valikud:['Hea — harrastan sporti','Rahuldav — jalutame regulaarselt','Nõrk — liikun vähe','Erivajadus — palun täpsusta kommentaaris']},
-  {id:'varustus',kysimus:'Kas sul on isiklik varustus?',valikud:['Päästevest ja kiiver olemas','Ainult päästevest','Varustus puudub — vajan laenamiseks','Osaline varustus']},
+  {id:'varustus',kysimus:'Kas sul on isiklik varustus?',valikud:['Päästevest ja kiiver olemas','Ainult päästevest','Varustus puudub — vajan laenamiseks','Osaline varustus — täpsusta allpool'],lisainfo:{valik:3,platseholder:'nt päästevest on, kiiver ja aerud puuduvad'}},
   {id:'ootused',kysimus:'Millised on sinu ootused matkale?',valikud:['Lõõgastumine ja loodus','Seiklus ja põnevus','Perepuhkus','Sport ja aktiivsus']},
   {id:'tervis',kysimus:'Kas on terviseprobleeme millest peaksime teadma?',valikud:['Ei ole','Ujumisoskus puudub','Allergia / ravimid olemas','Muu — täpsustamine komentaaris']},
 ];
@@ -3906,14 +3946,18 @@ function closeEelKusitlus(){
 function renderEelKusitlusForm(){
   let html='<div style="display:flex;flex-direction:column;gap:12px;">';
   EELKUSITLUS_KYSIMUSED.forEach((q,qi)=>{
+    const hasLisainfo=q.lisainfo!=null;
     html+=`<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;">
       <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">${qi+1}. ${escapeHtml(q.kysimus)}</div>
       <div style="display:flex;flex-direction:column;gap:4px;">
         ${q.valikud.map((v,vi)=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:5px 8px;border-radius:6px;border:1px solid transparent;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
-          <input type="radio" name="eelk-${q.id}" value="${vi}" style="accent-color:var(--accent);flex-shrink:0;"/>
+          <input type="radio" name="eelk-${q.id}" value="${vi}" style="accent-color:var(--accent);flex-shrink:0;" ${hasLisainfo&&q.lisainfo.valik===vi?`onchange="document.getElementById('eelk-lisainfo-${q.id}').style.display='block'"`:hasLisainfo?`onchange="document.getElementById('eelk-lisainfo-${q.id}').style.display='none'"`:''} />
           ${escapeHtml(v)}
         </label>`).join('')}
       </div>
+      ${hasLisainfo?`<div id="eelk-lisainfo-${q.id}" style="display:none;margin-top:8px;">
+        <input type="text" id="eelk-lisainfo-input-${q.id}" placeholder="${escapeHtml(q.lisainfo.platseholder||'')}" maxlength="200" style="width:100%;font-size:12px;padding:7px 10px;border-radius:7px;border:1px solid var(--accent);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;" />
+      </div>`:''}
     </div>`;
   });
   html+=`<div class="mrow"><label>Lisainfo / kommentaar (valikuline)</label>
@@ -3928,7 +3972,12 @@ async function saadaEelKusitlus(){
   const fb=window.fb;
   // Salvesta küsitlus matka külge
   try{
-    const kysimused=EELKUSITLUS_KYSIMUSED.map(q=>({id:q.id,kysimus:q.kysimus,valikud:q.valikud}));
+    const kysimused=EELKUSITLUS_KYSIMUSED.map(q=>({
+      id:q.id,
+      kysimus:q.kysimus,
+      valikud:q.valikud,
+      lisainfo:q.lisainfo||null
+    }));
     await fb.updateDoc(fb.doc(fb.db,'matkad',activeEelKusitlusMatkaId),{
       eelkusitlus:kysimused,
       eelkusitlusSaadetud:fb.serverTimestamp()
@@ -4453,10 +4502,10 @@ const RISKI_KYSIMUSED=[
   {
     id:'ilm', kysimus:'Milline on ilmaprognoos matka ajaks?',
     valikud:[
-      {tekst:'Päikseline, tuuletu',skoor:0},
-      {tekst:'Pilves, kerge tuul',skoor:0},
-      {tekst:'Vihm või äike oodata',skoor:2},
-      {tekst:'Tugev torm / äikesehoiatus',skoor:4},
+      {tekst:'Päikseline, tuuletu (0–3 m/s, puhangud kuni 5 m/s)',skoor:0},
+      {tekst:'Pilves, kerge tuul (4–7 m/s, puhangud kuni 12 m/s)',skoor:0},
+      {tekst:'Vihm või tuul (8–13 m/s, puhangud kuni 20 m/s)',skoor:2},
+      {tekst:'Tugev torm / äike (üle 14 m/s, puhangud üle 20 m/s)',skoor:4},
     ]
   },
   {
@@ -4502,7 +4551,8 @@ const RISKI_KYSIMUSED=[
       {tekst:'Enamasti — osades kohtades katk',skoor:1},
       {tekst:'Nõrk — väljas levivööndit',skoor:2},
       {tekst:'Puudub — täiesti eemal asustusest',skoor:3},
-    ]
+    ],
+    lisainfo:{valik:-1, platseholder:'', checkbox:true, checkboxTekst:'Kaasas on inReach / satelliitside seade (vähendab riski -2)', checkboxSkoorMuutus:-2}
   },
 ];
 
@@ -4528,6 +4578,7 @@ function renderRiskiKysimused(){
   const el=document.getElementById('riski-content');
   let html='<div style="display:flex;flex-direction:column;gap:14px;">';
   RISKI_KYSIMUSED.forEach((q,qi)=>{
+    const hasCheckbox=q.lisainfo?.checkbox;
     html+=`<div>
       <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">${qi+1}. ${escapeHtml(q.kysimus)}</div>
       <div style="display:flex;flex-direction:column;gap:4px;">
@@ -4537,6 +4588,11 @@ function renderRiskiKysimused(){
           ${v.skoor>0?`<span style="margin-left:auto;font-size:10px;background:${v.skoor>=3?'var(--red-bg)':v.skoor>=2?'var(--orange-bg)':'var(--grey-bg)'};color:${v.skoor>=3?'var(--red)':v.skoor>=2?'var(--orange)':'var(--grey)'};padding:2px 7px;border-radius:9px;font-family:'DM Mono',monospace;font-weight:600;">+${v.skoor}</span>`:''}
         </label>`).join('')}
       </div>
+      ${hasCheckbox?`<label style="display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px 12px;background:var(--green-bg);border:1px solid #a7d9bc;border-radius:8px;cursor:pointer;font-size:12px;color:var(--green);">
+        <input type="checkbox" id="riski-cb-${q.id}" style="accent-color:var(--green);width:15px;height:15px;flex-shrink:0;"/>
+        <span>${escapeHtml(q.lisainfo.checkboxTekst)}</span>
+        <span style="margin-left:auto;font-size:10px;background:var(--green-bg);color:var(--green);padding:2px 7px;border-radius:9px;font-family:'DM Mono',monospace;font-weight:600;">${q.lisainfo.checkboxSkoorMuutus}</span>
+      </label>`:''}
     </div>`;
   });
   html+='</div>';
@@ -4555,7 +4611,15 @@ async function arvutaRiski(){
   RISKI_KYSIMUSED.forEach(q=>{
     const idx=riskiVastused[q.id];
     koguskoor+=q.valikud[idx].skoor;
+    // Kontrolli checkbox pehmendust
+    if(q.lisainfo?.checkbox){
+      const cb=document.getElementById('riski-cb-'+q.id);
+      if(cb?.checked){
+        koguskoor+=q.lisainfo.checkboxSkoorMuutus;
+      }
+    }
   });
+  koguskoor=Math.max(0,koguskoor);
   // Max võimalik skoor
   const maxSkoor=RISKI_KYSIMUSED.reduce((s,q)=>s+Math.max(...q.valikud.map(v=>v.skoor)),0);
   // Normaliseeri 1-10 skaalale

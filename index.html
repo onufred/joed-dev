@@ -4073,6 +4073,7 @@ function closeProfiil(){document.getElementById('profiilmodal').classList.remove
 // =============== MATKA JÄRELRAPORT ===============
 
 async function openJarelRaport(matkaId){
+  document.getElementById('mmmodal').classList.remove('open');
   document.getElementById('jarelraportmodal').classList.add('open');
   document.getElementById('jarelraport-content').innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">⏳ Laen...</div>';
   try{
@@ -4107,7 +4108,10 @@ async function openJarelRaport(matkaId){
   }
 }
 
-function closeJarelRaport(){document.getElementById('jarelraportmodal').classList.remove('open');}
+function closeJarelRaport(){
+  document.getElementById('jarelraportmodal').classList.remove('open');
+  document.getElementById('mmmodal').classList.add('open');
+}
 
 function renderJarelRaport(m, osalejad, kestus, veetase, vastuseid){
   const el=document.getElementById('jarelraport-content');
@@ -4235,12 +4239,19 @@ let riskiVastused={};
 let activeRiskiMatkaId=null;
 
 function openRiskiAnalyys(matkaId){
+  // Sulge "Mu matkad" modal et risk oleks nähtav
+  document.getElementById('mmmodal').classList.remove('open');
   activeRiskiMatkaId=matkaId;
   riskiVastused={};
   document.getElementById('riskimodal').classList.add('open');
   renderRiskiKysimused();
 }
-function closeRiski(){document.getElementById('riskimodal').classList.remove('open');activeRiskiMatkaId=null;}
+function closeRiski(){
+  document.getElementById('riskimodal').classList.remove('open');
+  activeRiskiMatkaId=null;
+  // Ava "Mu matkad" tagasi
+  document.getElementById('mmmodal').classList.add('open');
+}
 
 function renderRiskiKysimused(){
   const el=document.getElementById('riski-content');

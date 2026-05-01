@@ -1713,6 +1713,7 @@ async function loadLoigud(){
     const t=await fetchGvizJSON(GVIZ_LOIGUD);
     if(!t.cols||!t.rows)return;
     let jogiIdx=-1, idIdx=-1, nimiIdx=-1, algusIdx=-1, loppIdx=-1, pikkusIdx=-1, raskIdx=-1, markIdx=-1;
+    let kayakMinIdx=-1, raftMinIdx=-1, maxSafeIdx=-1, absMaxIdx=-1;
     for(let i=0;i<t.cols.length;i++){
       const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
       if(jogiIdx<0&&(lbl.includes('jogi')||lbl.includes('jõgi')))jogiIdx=i;
@@ -1723,6 +1724,10 @@ async function loadLoigud(){
       else if(pikkusIdx<0&&lbl.includes('pikkus'))pikkusIdx=i;
       else if(raskIdx<0&&lbl.includes('rask'))raskIdx=i;
       else if(markIdx<0&&(lbl.includes('mark')||lbl.includes('märk')))markIdx=i;
+      else if(kayakMinIdx<0&&(lbl.includes('kayakmin')||lbl.includes('minkayak')||lbl.includes('kajakmin')||lbl.includes('minkajak')))kayakMinIdx=i;
+      else if(raftMinIdx<0&&(lbl.includes('raftmin')||lbl.includes('minraft')))raftMinIdx=i;
+      else if(maxSafeIdx<0&&(lbl.includes('maxsafe')||lbl.includes('maxohutu')))maxSafeIdx=i;
+      else if(absMaxIdx<0&&(lbl.includes('absmax')||lbl.includes('absmaks')))absMaxIdx=i;
     }
     const str=(c)=>(c&&c.v!=null)?String(c.v).trim():'';
     const numv=(c)=>{if(!c||c.v==null)return null;const v=typeof c.v==='number'?c.v:parseFloat(String(c.v).replace(',','.'));return isNaN(v)?null:v;};
@@ -1738,7 +1743,12 @@ async function loadLoigud(){
         lopp:parseCoords(str(c[loppIdx>=0?loppIdx:4])),
         pikkus:numv(c[pikkusIdx>=0?pikkusIdx:5]),
         raskus:str(c[raskIdx>=0?raskIdx:6]),
-        markused:str(c[markIdx>=0?markIdx:7])
+        markused:str(c[markIdx>=0?markIdx:7]),
+        // Lõigupõhised veetaseme piirid (valikulised)
+        kayakMin: kayakMinIdx>=0 ? numv(c[kayakMinIdx]) : null,
+        raftMin:  raftMinIdx>=0  ? numv(c[raftMinIdx])  : null,
+        maxSafe:  maxSafeIdx>=0  ? numv(c[maxSafeIdx])  : null,
+        absMax:   absMaxIdx>=0   ? numv(c[absMaxIdx])   : null
       });
     }
   }catch(e){console.warn('Lõikude laadimine ebaõnnestus:',e);}
@@ -1888,11 +1898,16 @@ function openV(jogi){
   }
   document.getElementById('vp-title').textContent='🗺️ '+jogi;
   document.getElementById('vp-sub').textContent=myLoigud.length+' lõik'+(myLoigud.length>1?'u':'')+' · '+punktid.filter(p=>p.jogi.toLowerCase()===jogi.toLowerCase()).length+' punkti';
+  // Leia praeguse jõe veetaseme info (jaama põhjal)
+  const jogiSt=allSt.find(s=>s.jogi===jogi);
   // Tabid lõikude kaupa (kasutaja omad on eristatud ⭐ märgiga)
   const tabsEl=document.getElementById('vp-tabs');
   let tabsHtml=myLoigud.map((l,i)=>{
     const lbl=l.isUserLoik?'⭐ '+(l.nimi||l.id):(l.nimi||l.id);
-    return `<button class="vp-tab ${i===0?'active':''} ${l.isUserLoik?'user-loik':''}" onclick="selectLoik('${l.id}')">${lbl}</button>`;
+    // Värviline täpp seisundi näitamiseks (ainult kui veetaseme andmed olemas)
+    const seis=getLoikSeisund(l, jogiSt);
+    const dot=seis?`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${seis.color};margin-right:5px;vertical-align:middle;" title="${seis.title}"></span>`:'';
+    return `<button class="vp-tab ${i===0?'active':''} ${l.isUserLoik?'user-loik':''}" onclick="selectLoik('${l.id}')">${dot}${lbl}</button>`;
   }).join('');
   // Lisa "+ Loo oma lõik" nupp ainult Premium+ kasutajatele
   if(canCreateLoik()){
@@ -1920,12 +1935,11 @@ function selectLoik(loikId){
   if(!l)l=userLoigud.find(ll=>ll.id===loikId);
   if(!l)return;
   activeLoik=l;
-  // Aktiveeri tab
+  // Aktiveeri tab — kontrolli onclick atribuudi järgi (sisaldab loikId-d)
   document.querySelectorAll('.vp-tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.vp-tab').forEach(t=>{
-    const txt=t.textContent;
-    const expectedLbl=l.isUserLoik?'⭐ '+(l.nimi||l.id):(l.nimi||l.id);
-    if(txt===expectedLbl){
+    const oc=t.getAttribute('onclick')||'';
+    if(oc.includes(`selectLoik('${loikId}')`)){
       t.classList.add('active');
     }
   });
@@ -1950,6 +1964,20 @@ function renderLoik(l){
       <span>⭐ <b>Sinu privaatne lõik</b> — näed ainult sina</span>
       <button onclick="deleteUserLoik('${l.firestoreId}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif;">🗑 Kustuta</button>
     </div>`;
+  }
+  // Lõigu seisundi ribake (suur, selgelt nähtav) — eraldab lõigupõhise hinnangu jõe omast
+  {
+    const seis=getLoikSeisund(l, selSt);
+    if(seis){
+      const customLimits=(l.kayakMin!=null||l.maxSafe!=null);
+      html+=`<div style="background:${seis.bg};border:1px solid ${seis.color}40;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;">
+        <div style="font-size:24px;flex-shrink:0;">${seis.icon}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;color:${seis.color};">${seis.title}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">${seis.desc}${customLimits?' · <i>lõigu enda piirid</i>':' · jõe peajaama põhjal'}</div>
+        </div>
+      </div>`;
+    }
   }
   // Info pillid + tegevuste nupud
   html+='<div class="vp-loik-info">';
@@ -3234,15 +3262,43 @@ function getVeetaseHoiatus(r){
 
 // =============== DÜNAAMILINE RASKUSASTE ===============
 
+// Lõigu seisundi hindamine — kas see lõik sobib hetkel sõiduks?
+// Kasutab lõigu enda piire kui need on määratud, muidu jõe omasid
+function getLoikSeisund(loik, st){
+  if(!st||st.level==null)return null;
+  const kayakMin=loik.kayakMin!=null?loik.kayakMin:(st.kayakMin||40);
+  const maxSafe=loik.maxSafe!=null?loik.maxSafe:(st.maxSafe||200);
+  const absMax=loik.absMax!=null?loik.absMax:(st.absMax||maxSafe*1.3);
+  const level=st.level;
+  if(level>=absMax){
+    return{icon:'🚫',title:'Ohtlik — ärge sõitke',desc:`Veetase ${level} cm ületab absoluutse piirina ${absMax} cm`,bg:'#fef2f2',color:'#dc2626'};
+  }
+  if(level>=maxSafe){
+    return{icon:'⚠️',title:'Liiga kõrge',desc:`Veetase ${level} cm — ohutu max ${maxSafe} cm. Sõit ainult kogenutele.`,bg:'#fef2f2',color:'#dc2626'};
+  }
+  if(level>=maxSafe*0.85){
+    return{icon:'⚠️',title:'Kõrge vesi — ettevaatust',desc:`Veetase ${level} cm — lähenemas ohutule maksimumile ${maxSafe} cm`,bg:'#fff7ed',color:'#c2410c'};
+  }
+  if(level<kayakMin){
+    return{icon:'🚫',title:'Liiga madal',desc:`Veetase ${level} cm — kajaki minimum ${kayakMin} cm. Sõit pole soovitatav.`,bg:'#f3f4f6',color:'#6b7280'};
+  }
+  if(level<kayakMin*1.2){
+    return{icon:'⚡',title:'Sobib — vesi madalapoole',desc:`Veetase ${level} cm. Võib olla raske mõnes kohas.`,bg:'#fefce8',color:'#ca8a04'};
+  }
+  return{icon:'✅',title:'Sobib sõiduks',desc:`Veetase ${level} cm — head tingimused (kajak ${kayakMin}–${maxSafe} cm)`,bg:'#f0fdf4',color:'#16a34a'};
+}
+
 // Arvuta lõigu dünaamiline raskusaste veetaseme põhjal
 // Tagastab {label, bg, color} või null kui pole piisavalt infot
+// Eelistab lõigu enda piire, fallback jõe peajaama omadele
 function getDynRaskus(loik, st){
   if(!st||st.level==null)return null;
-  if(!loik.kayakMin&&!loik.maxSafe)return null;
+  // Eelista lõigu enda piire kui need on olemas
+  const kayakMin=loik.kayakMin!=null?loik.kayakMin:(st.kayakMin||40);
+  const maxSafe=loik.maxSafe!=null?loik.maxSafe:(st.maxSafe||200);
+  const absMax=loik.absMax!=null?loik.absMax:(st.absMax||maxSafe*1.3);
+  if(!kayakMin&&!maxSafe)return null;
   const level=st.level;
-  const kayakMin=loik.kayakMin||st.kayakMin||40;
-  const maxSafe=loik.maxSafe||st.maxSafe||200;
-  const absMax=loik.absMax||st.absMax||maxSafe*1.3;
   // Arvuta kui kaugel on vesi kayakMin ja maxSafe vahel (0-1)
   const range=maxSafe-kayakMin;
   if(range<=0)return null;

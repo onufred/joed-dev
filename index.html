@@ -703,9 +703,6 @@
 <!-- ISIKLIK STATISTIKA -->
 <div class="overlay" id="statsmodal">
 
-<!-- VARUSTUSE MALLID -->
-<div class="overlay" id="varustusmallidmodal">
-
 <!-- HINNASTUS MODAL -->
 <div class="overlay" id="pricingmodal">
   <div class="modal" style="width:480px;max-width:96vw;">
@@ -714,16 +711,13 @@
       <div style="font-size:20px;font-weight:700;letter-spacing:-0.4px;">Vali oma pakett</div>
       <div style="font-size:13px;color:var(--text3);margin-top:4px;">Tühista igal ajal. Ilma lepinguta.</div>
     </div>
-    <!-- Toggle kuu/aasta -->
     <div id="pricing-toggle" style="display:flex;justify-content:center;margin-bottom:20px;">
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:3px;display:flex;gap:2px;">
         <button id="ptog-kuu" onclick="setPricingPeriod('kuu')" style="padding:6px 18px;border-radius:16px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;background:var(--accent);color:#fff;transition:all .15s;">Kuumakse</button>
         <button id="ptog-aasta" onclick="setPricingPeriod('aasta')" style="padding:6px 18px;border-radius:16px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;background:transparent;color:var(--text2);transition:all .15s;">Aastamakse <span style="font-size:10px;color:var(--green);font-weight:700;">-33%</span></button>
       </div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:10px;" id="pricing-cards">
-      <!-- Kaardid renderdatakse JS-iga -->
-    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;" id="pricing-cards"></div>
     <div style="text-align:center;margin-top:14px;font-size:11px;color:var(--text3);">
       🔒 Turvaline makse Stripe kaudu · Kaardimakse · EL kaardid
     </div>
@@ -764,53 +758,32 @@
   <div class="modal vmodal" style="max-width:520px;">
     <div class="modal-title">📣 Lõigu reklaam</div>
     <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6;">Sinu ettevõte kuvatakse valitud jõelõikude all — kasutajad näevad otse sinu kontakte ja saavad pärida matka.</p>
-    <!-- Aktiivne tellimus -->
     <div id="reklaam-status" style="margin-bottom:14px;"></div>
-    <!-- Reklaam teksti seadistus -->
     <div id="reklaam-seadistus" style="display:none;">
-      <div class="mrow">
-        <label>Ettevõtte nimi *</label>
-        <input id="rek-nimi" type="text" placeholder="nt Lõuna Seiklused OÜ" maxlength="80"/>
-      </div>
-      <div class="mrow">
-        <label>Lühike kirjeldus *</label>
-        <input id="rek-tekst" type="text" placeholder="nt Kanuumatk juhendajaga, varustus olemas" maxlength="120"/>
-      </div>
-      <div class="mrow">
-        <label>E-post *</label>
-        <input id="rek-email" type="email" placeholder="info@ettevote.ee"/>
-      </div>
-      <div class="mrow">
-        <label>Telefon (valikuline)</label>
-        <input id="rek-tel" type="tel" placeholder="+372 5123 4567"/>
-      </div>
-      <div class="mrow">
-        <label>Veebileht (valikuline)</label>
-        <input id="rek-veeb" type="url" placeholder="https://ettevote.ee"/>
-      </div>
-      <div class="mrow">
-        <label>Teenused (komaga eraldatud)</label>
-        <input id="rek-teenused" type="text" placeholder="Paadid, Transport, Juhendaja, Toitlustus"/>
-      </div>
-      <!-- Lõikude valik (kui pakett lubab) -->
+      <div class="mrow"><label>Ettevõtte nimi *</label><input id="rek-nimi" type="text" placeholder="nt Lõuna Seiklused OÜ" maxlength="80"/></div>
+      <div class="mrow"><label>Lühike kirjeldus *</label><input id="rek-tekst" type="text" placeholder="nt Kanuumatk juhendajaga, varustus olemas" maxlength="120"/></div>
+      <div class="mrow"><label>E-post *</label><input id="rek-email" type="email" placeholder="info@ettevote.ee"/></div>
+      <div class="mrow"><label>Telefon (valikuline)</label><input id="rek-tel" type="tel" placeholder="+372 5123 4567"/></div>
+      <div class="mrow"><label>Veebileht (valikuline)</label><input id="rek-veeb" type="url" placeholder="https://ettevote.ee"/></div>
+      <div class="mrow"><label>Teenused (komaga eraldatud)</label><input id="rek-teenused" type="text" placeholder="Paadid, Transport, Juhendaja, Toitlustus"/></div>
       <div id="rek-loigud-plokk" style="margin-bottom:12px;">
         <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">Lõigud kus kuvatakse <span id="rek-loigud-limit" style="color:var(--accent);"></span></label>
         <div id="rek-loigud-list" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:9px;padding:8px;background:var(--bg);"></div>
       </div>
       <button class="btn btn-primary" onclick="saveLoikReklaam()" style="width:100%;">💾 Salvesta reklaam</button>
     </div>
-    <!-- Kui pole tellimust -->
     <div id="reklaam-no-sub" style="text-align:center;padding:20px;display:none;">
       <div style="font-size:40px;margin-bottom:10px;">📣</div>
       <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px;">Telli lõigu reklaam</div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5;">Jõua täpselt nende kasutajateni kes planeerivad matka sinu piirkonnas.</div>
       <button class="btn btn-primary" onclick="closeLRModal();openPricing('reklaam');" style="width:100%;">Vaata hindu →</button>
     </div>
-    <div class="mact">
-      <button class="btn btn-primary" onclick="closeLRModal()">Sulge</button>
-    </div>
+    <div class="mact"><button class="btn btn-primary" onclick="closeLRModal()">Sulge</button></div>
   </div>
 </div>
+
+<!-- VARUSTUSE MALLID -->
+<div class="overlay" id="varustusmallidmodal">
   <div class="modal vmodal">
     <div class="modal-title">🎒 Varustuse nimekirja mallid</div>
     <div id="vm-list" style="margin-bottom:12px;"></div>

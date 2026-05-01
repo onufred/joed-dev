@@ -1981,7 +1981,11 @@ function renderLoik(l){
   }
   // Info pillid + tegevuste nupud
   html+='<div class="vp-loik-info">';
-  if(l.pikkus)html+=`<span class="vp-info-pill">📏 <b>${l.pikkus} km</b></span>`;
+  if(l.pikkus){
+    html+=`<span class="vp-info-pill">📏 <b>${l.pikkus} km</b></span>`;
+  } else {
+    html+=`<span class="vp-info-pill" style="color:var(--text3);">📏 <span style="font-size:10px;">arvutamisel...</span></span>`;
+  }
   // Dünaamiline raskusaste veetaseme põhjal
   {
     const dynRaskus=getDynRaskus(l, selSt);
@@ -2432,6 +2436,47 @@ function windDirText(deg){
   return dirs[Math.round(deg/45)%8];
 }
 
+// Lõigu pikkuse arvutamine ja Sheetsi salvestamine kui pole määratud
+const LOIK_PIKKUS_API='https://script.google.com/macros/s/AKfycbwXRCGF9RYooWG06eYu8nfnwrFktgQiuALcoxhhucba_TYZ2-cRvJ7BBtiUA7MYR1MY/exec';
+const LOIK_PIKKUS_SECRET='veeretked2026loik';
+
+async function maybeUpdateLoikPikkus(loik, totalKm){
+  if(!loik||!loik.jogi||!loik.id)return;
+  if(loik.pikkus!=null&&loik.pikkus>0)return; // Juba olemas
+  if(!totalKm||totalKm<=0)return;
+  // Ümarda 0.1 km täpsuseni
+  const km=Math.round(totalKm*10)/10;
+  // Värskenda kohe lokaalselt mälus
+  loik.pikkus=km;
+  // Kontrolli session cache - ära spämmi
+  let sentCache={};
+  try{sentCache=JSON.parse(sessionStorage.getItem('loikPikkusSent')||'{}');}catch(e){}
+  const cacheId=`${loik.jogi}__${loik.id}`;
+  if(sentCache[cacheId])return;
+  sentCache[cacheId]=Date.now();
+  try{sessionStorage.setItem('loikPikkusSent',JSON.stringify(sentCache));}catch(e){}
+  // Kui API URL pole seadistatud, jäta vahele
+  if(LOIK_PIKKUS_API.includes('PLACEHOLDER')){
+    console.log(`[LoikPikkus] Arvutati ${km} km lõigule ${loik.jogi}/${loik.id} (Apps Script API pole seadistatud)`);
+    return;
+  }
+  try{
+    const url=LOIK_PIKKUS_API+'?secret='+encodeURIComponent(LOIK_PIKKUS_SECRET)
+              +'&jogi='+encodeURIComponent(loik.jogi)
+              +'&id='+encodeURIComponent(loik.id)
+              +'&pikkus='+km;
+    const resp=await fetch(url);
+    const data=await resp.json();
+    if(data.ok){
+      console.log(`✅ Lõigu pikkus salvestatud Sheetsi: ${loik.jogi}/${loik.id} = ${km} km`);
+    } else {
+      console.warn('Lõigu pikkuse salvestamine ebaõnnestus:',data);
+    }
+  }catch(e){
+    console.warn('Lõigu pikkuse saatmine ebaõnnestus:',e);
+  }
+}
+
 // Lae päris jõejoon BRouter API kaudu
 async function fetchRiverRoute(start, end){
   // start ja end on [lat, lng] kujul, BRouter tahab "lng,lat|lng,lat"
@@ -2496,6 +2541,8 @@ function initLoikMap(l, myPunktid){
       // Salvesta joone andmed GPS arvutuste jaoks
       gpsCurrentRoute=latlngs;
       gpsCurrentRouteTotalKm=routeLengthFrom(latlngs, 0)/1000;
+      // Kui pikkus pole määratud, arvuta ja salvesta Sheetsi
+      maybeUpdateLoikPikkus(l, gpsCurrentRouteTotalKm);
       // Eemalda sirgjoon ja joonista päris jõe joon
       if(routeLine){vMap.removeLayer(routeLine);}
       L.polyline(latlngs, {color:'#2d5a3d', weight:4, opacity:0.85}).addTo(vMap);

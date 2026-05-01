@@ -2131,6 +2131,58 @@ function renderLoik(l){
       </div>`;
     }
   }
+  // Veetaseme piiride kast — nähtav koheselt lõigu vaates
+  {
+    const jSt=selSt||allSt.find(s=>s.jogi===l.jogi);
+    const km=l.kayakMin??jSt?.kayakMin;
+    const rm=l.raftMin??jSt?.raftMin;
+    const ms=l.maxSafe??jSt?.maxSafe;
+    const am=l.absMax??jSt?.absMax;
+    const cur=jSt?.level;
+    if(km!=null||rm!=null||ms!=null||am!=null){
+      // Visuaalne riba: kus praegune tase asub vahemikus
+      const minRange=Math.min(...[km,rm,ms,am,cur].filter(v=>v!=null));
+      const maxRange=Math.max(...[km,rm,ms,am,cur].filter(v=>v!=null));
+      const range=Math.max(10, maxRange-minRange);
+      const padding=range*0.1;
+      const visMin=minRange-padding;
+      const visMax=maxRange+padding;
+      const fullRange=visMax-visMin;
+      const pct=v=>v!=null?((v-visMin)/fullRange)*100:null;
+      const curPct=pct(cur);
+      html+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;">💧 Veetaseme piirid</div>
+          ${cur!=null?`<div style="font-size:16px;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace;">${cur} cm</div>`:''}
+        </div>
+        ${cur!=null?`<div style="position:relative;height:8px;background:var(--bg);border-radius:4px;margin-bottom:14px;overflow:visible;">
+          ${km!=null?`<div style="position:absolute;left:${pct(km)}%;top:-2px;bottom:-2px;width:2px;background:#16a34a;" title="Kajak min ${km}cm"></div>`:''}
+          ${rm!=null&&rm!==km?`<div style="position:absolute;left:${pct(rm)}%;top:-2px;bottom:-2px;width:2px;background:#2563eb;" title="Rafting min ${rm}cm"></div>`:''}
+          ${ms!=null?`<div style="position:absolute;left:${pct(ms)}%;top:-2px;bottom:-2px;width:2px;background:#f59e0b;" title="Max ohutu ${ms}cm"></div>`:''}
+          ${am!=null?`<div style="position:absolute;left:${pct(am)}%;top:-2px;bottom:-2px;width:2px;background:#dc2626;" title="Abs max ${am}cm"></div>`:''}
+          <div style="position:absolute;left:${curPct}%;top:-4px;width:14px;height:14px;background:var(--accent);border:2px solid #fff;border-radius:50%;transform:translateX(-50%);box-shadow:0 1px 3px rgba(0,0,0,0.3);" title="Praegu ${cur}cm"></div>
+        </div>`:''}
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px;">
+          ${km!=null?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:6px 10px;">
+            <div style="font-size:9px;font-weight:600;color:#16a34a;text-transform:uppercase;letter-spacing:0.4px;">🚣 Kajak min</div>
+            <div style="font-size:14px;font-weight:700;color:#16a34a;font-family:'DM Mono',monospace;">${km} cm</div>
+          </div>`:''}
+          ${rm!=null&&rm!==km?`<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:6px 10px;">
+            <div style="font-size:9px;font-weight:600;color:#2563eb;text-transform:uppercase;letter-spacing:0.4px;">🛶 Rafting min</div>
+            <div style="font-size:14px;font-weight:700;color:#2563eb;font-family:'DM Mono',monospace;">${rm} cm</div>
+          </div>`:''}
+          ${ms!=null?`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:6px 10px;">
+            <div style="font-size:9px;font-weight:600;color:#d97706;text-transform:uppercase;letter-spacing:0.4px;">⚠️ Max ohutu</div>
+            <div style="font-size:14px;font-weight:700;color:#d97706;font-family:'DM Mono',monospace;">${ms} cm</div>
+          </div>`:''}
+          ${am!=null?`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:6px 10px;">
+            <div style="font-size:9px;font-weight:600;color:#dc2626;text-transform:uppercase;letter-spacing:0.4px;">🚫 Abs max</div>
+            <div style="font-size:14px;font-weight:700;color:#dc2626;font-family:'DM Mono',monospace;">${am} cm</div>
+          </div>`:''}
+        </div>
+      </div>`;
+    }
+  }
   // Info pillid + tegevuste nupud
   html+='<div class="vp-loik-info">';
   if(l.pikkus){
@@ -2305,12 +2357,6 @@ function renderGraph(w, history, river, loik){
   if(!el)return;
   let html='';
 
-  // Kasuta lõigu piire kui on, muidu jõe omad
-  const kayakMin=loik?.kayakMin??river?.kayakMin;
-  const raftMin=loik?.raftMin??river?.raftMin;
-  const maxSafe=loik?.maxSafe??river?.maxSafe;
-  const absMax=loik?.absMax??river?.absMax;
-
   // 1) Veetaseme ajaloo graafik
   if(history&&history.length>=2){
     const last=history[history.length-1];
@@ -2318,46 +2364,16 @@ function renderGraph(w, history, river, loik){
     const days=Math.round((last.ts-first.ts)/(24*3600*1000));
     const minLvl=Math.min(...history.map(h=>h.lvl));
     const maxLvl=Math.max(...history.map(h=>h.lvl));
-    // Laienda vahemikku et mahuksid ka piirid
-    const allLevels=[minLvl,maxLvl];
-    if(kayakMin)allLevels.push(kayakMin);
-    if(maxSafe)allLevels.push(maxSafe);
-    if(absMax)allLevels.push(absMax);
-    const visMin=Math.min(...allLevels)-5;
-    const visMax=Math.max(...allLevels)+5;
-    const range=Math.max(5, visMax-visMin);
+    const range=Math.max(5, maxLvl-minLvl);
     const w0=600, h0=120;
-    const toY=(lvl)=>(h0-((lvl-visMin)/range)*(h0-20)-10);
     let path='', dots='';
     for(let i=0;i<history.length;i++){
       const x=(i/(history.length-1||1))*w0;
-      const y=toY(history[i].lvl);
+      const y=h0-((history[i].lvl-minLvl)/range)*(h0-20)-10;
       path+=(i===0?'M':' L')+x.toFixed(1)+','+y.toFixed(1);
       if(i%Math.max(1, Math.floor(history.length/15))===0||i===history.length-1){
         dots+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="#2d5a3d"/>`;
       }
-    }
-    // Piirijooned
-    let thresholdLines='';
-    if(kayakMin!=null&&kayakMin>visMin&&kayakMin<visMax){
-      const y=toY(kayakMin).toFixed(1);
-      thresholdLines+=`<line x1="0" y1="${y}" x2="${w0}" y2="${y}" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.8"/>
-        <text x="4" y="${Math.max(8,parseFloat(y)-3)}" font-size="9" fill="#16a34a" font-family="DM Mono,monospace">K min ${kayakMin}cm</text>`;
-    }
-    if(raftMin!=null&&raftMin>visMin&&raftMin<visMax&&raftMin!==kayakMin){
-      const y=toY(raftMin).toFixed(1);
-      thresholdLines+=`<line x1="0" y1="${y}" x2="${w0}" y2="${y}" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.8"/>
-        <text x="4" y="${Math.max(8,parseFloat(y)-3)}" font-size="9" fill="#2563eb" font-family="DM Mono,monospace">R min ${raftMin}cm</text>`;
-    }
-    if(maxSafe!=null&&maxSafe>visMin&&maxSafe<visMax){
-      const y=toY(maxSafe).toFixed(1);
-      thresholdLines+=`<line x1="0" y1="${y}" x2="${w0}" y2="${y}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.8"/>
-        <text x="4" y="${Math.max(8,parseFloat(y)-3)}" font-size="9" fill="#f59e0b" font-family="DM Mono,monospace">Max ohutu ${maxSafe}cm</text>`;
-    }
-    if(absMax!=null&&absMax>visMin&&absMax<visMax){
-      const y=toY(absMax).toFixed(1);
-      thresholdLines+=`<line x1="0" y1="${y}" x2="${w0}" y2="${y}" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.9"/>
-        <text x="4" y="${Math.max(8,parseFloat(y)-3)}" font-size="9" fill="#dc2626" font-family="DM Mono,monospace">Abs max ${absMax}cm</text>`;
     }
     const trend=last.lvl-first.lvl;
     const trendIcon=trend>2?'📈':(trend<-2?'📉':'➡️');
@@ -2366,7 +2382,6 @@ function renderGraph(w, history, river, loik){
       <div class="g-section-title">📈 Veetase — viimased ${days} päeva ${trendIcon} <span style="color:${trend>0?'#1a6b4a':(trend<0?'#9a4e00':'#6b6660')};">${trendText}</span></div>
       <div class="g-water">
         <svg viewBox="0 0 ${w0} ${h0}" preserveAspectRatio="none" style="width:100%;height:120px;">
-          ${thresholdLines}
           <path d="${path}" stroke="#2d5a3d" stroke-width="2" fill="none"/>
           ${dots}
         </svg>
@@ -2382,12 +2397,6 @@ function renderGraph(w, history, river, loik){
         <span><b>Kõrgeim:</b> ${maxLvl} cm</span>
         <span><b>Mõõdetud:</b> ${history.length} korda</span>
       </div>
-      ${thresholdLines?`<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:10px;font-family:'DM Mono',monospace;">
-        ${kayakMin!=null?`<span style="color:#16a34a;">— Kajak min ${kayakMin}cm</span>`:''}
-        ${raftMin!=null&&raftMin!==kayakMin?`<span style="color:#2563eb;">— Rafting min ${raftMin}cm</span>`:''}
-        ${maxSafe!=null?`<span style="color:#f59e0b;">— Max ohutu ${maxSafe}cm</span>`:''}
-        ${absMax!=null?`<span style="color:#dc2626;">— Absoluutne max ${absMax}cm</span>`:''}
-      </div>`:''}
     </div>`;
   } else if(history&&history.length===1){
     html+=`<div class="g-section">

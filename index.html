@@ -361,14 +361,16 @@
   </div>
   <div class="header-right">
     <button class="btn" id="rbtn" onclick="refreshAll()">↻ Uuenda</button>
-    <button class="btn" onclick="openKoikLoigud()" title="Vaata kõiki lõike kaardil">🗺️ Lõigud</button>
-    <button class="btn" onclick="openEdetabel()" title="Vaata edetabelit">🏆</button>
-    <button class="btn" id="reset-btn" onclick="resetDefaults()" title="Lähtesta vaikimisi nimekiri" style="display:none;">🔄 Lähtesta</button>
-    <button class="btn" id="export-btn" onclick="exportSettings()" style="display:none;">📤 Ekspordi</button>
-    <button class="btn" id="matkad-btn" onclick="openMyMatkad()" style="display:none;">⛵ Mu matkad</button>
-    <button class="btn" id="joined-btn" onclick="openMyJoined()" style="display:none;">🚣 Mu liitumised</button>
+    <button class="btn" onclick="openKoikLoigud()" title="Sirvi kõiki lõike">🗺️ Lõigud</button>
+    <button class="btn" onclick="openEdetabel()" title="Edetabel">🏆</button>
     <button class="btn btn-primary" id="add-btn" onclick="openM()" style="display:none;">+ Lisa jõgi</button>
     <button class="btn btn-primary" id="newtrip-btn" onclick="openCreateMatk()" style="display:none;background:linear-gradient(135deg,#1d4ed8,#1e3a8a);">⛵ Loo matk</button>
+    <!-- Rohkem nuppe profiilimenüüs -->
+    <!-- Peidetud nupud JS jaoks (display:block/none kontrollib nähtavust) -->
+    <span style="display:none;"><button id="reset-btn" onclick="resetDefaults()"></button></span>
+    <span style="display:none;"><button id="export-btn" onclick="exportSettings()"></button></span>
+    <span style="display:none;"><button id="matkad-btn" onclick="openMyMatkad()"></button></span>
+    <span style="display:none;"><button id="joined-btn" onclick="openMyJoined()"></button></span>
     <div id="auth-area">
       <button class="btn" id="login-btn" onclick="doLogin()">🔐 Logi sisse</button>
       <div id="user-chip" style="display:none;" onclick="toggleUserMenu()" title="Klõpsa profiili menüü jaoks">
@@ -378,8 +380,14 @@
       </div>
       <div id="user-menu" style="display:none;">
         <div id="user-menu-email" style="padding:10px 14px; font-size:11px; color:var(--text3); border-bottom:1px solid var(--surface2); font-family:'DM Mono',monospace; word-break:break-all;"></div>
+        <button class="user-menu-item" onclick="openMyMatkad();toggleUserMenu();">⛵ Mu matkad</button>
+        <button class="user-menu-item" onclick="openMyJoined();toggleUserMenu();">🚣 Mu liitumised</button>
         <button class="user-menu-item" onclick="openStats();toggleUserMenu();">📊 Minu statistika</button>
         <button class="user-menu-item" onclick="openFeedback();toggleUserMenu();">💬 Tagasiside</button>
+        <div style="border-top:1px solid var(--border);margin:4px 0;"></div>
+        <button class="user-menu-item" onclick="exportSettings();toggleUserMenu();">📤 Ekspordi seaded</button>
+        <button class="user-menu-item" onclick="resetDefaults();toggleUserMenu();">🔄 Lähtesta nimekiri</button>
+        <div style="border-top:1px solid var(--border);margin:4px 0;"></div>
         <button class="user-menu-item" id="admin-menu-btn" style="display:none;" onclick="openAdminPanel();toggleUserMenu();">🛠️ Admin paneel</button>
         <button class="user-menu-item" onclick="doLogout()">🚪 Logi välja</button>
       </div>
@@ -3679,16 +3687,28 @@ function renderKoikLoigud(loigud){
 }
 
 function selectLoikFromList(jogi, loikId){
-  // Ava jõgi ja vali lõik
-  const st=allSt.find(s=>s.jogi===jogi);
-  if(st){
-    openV(jogi);
-    setTimeout(()=>{
-      const loigud=window.loigudByJogi?.[jogi]||[];
-      const l=loigud.find(ll=>ll.id===loikId);
-      if(l)selectLoik(l);
-    },300);
+  closeKoikLoigud();
+  // Leia jõgi rivers massiivist (paindlik otsing)
+  const r=rivers.find(rr=>rr.jogi===jogi||rr.jogi?.toLowerCase()===jogi?.toLowerCase());
+  if(!r){
+    // Jõge pole kasutaja nimekirjas — proovi allSt kaudu
+    const st=allSt.find(s=>s.jogi===jogi||s.veekogu===jogi);
+    if(!st){alert('Jõgi "'+jogi+'" pole sinu nimekirjas. Lisa see kõigepealt.');return;}
   }
+  // Ava jõe lõikude vaade
+  openV(jogi);
+  // Oota kuni kaart on laetud, siis vali lõik
+  let attempts=0;
+  const trySelect=()=>{
+    const loigud=window.loigudByJogi?.[jogi]||[];
+    const l=loigud.find(ll=>ll.id===loikId);
+    if(l){
+      selectLoik(l.id);
+      return;
+    }
+    if(++attempts<10) setTimeout(trySelect, 200);
+  };
+  setTimeout(trySelect, 300);
 }
 
 // =============== KÜSITLUSE VASTAMINE ===============

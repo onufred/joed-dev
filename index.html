@@ -655,6 +655,10 @@
 <div class="overlay" id="mmmodal">
   <div class="modal vmodal">
     <div class="modal-title">⛵ Mu matkad</div>
+    <div style="display:flex;gap:4px;background:var(--bg);border-radius:10px;padding:4px;margin-bottom:12px;">
+      <button id="mm-tab-aktiivsed" onclick="switchMmTab('aktiivsed')" style="flex:1;padding:8px;border-radius:7px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;background:var(--accent);color:#fff;transition:all .15s;">⛵ Aktiivsed</button>
+      <button id="mm-tab-ajalugu" onclick="switchMmTab('ajalugu')" style="flex:1;padding:8px;border-radius:7px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;background:transparent;color:var(--text2);transition:all .15s;">📋 Ajalugu</button>
+    </div>
     <div id="mm-list" style="margin-top:8px;">
       <div style="padding:30px;text-align:center;color:var(--text3);">⏳ Laen matku...</div>
     </div>
@@ -5917,10 +5921,11 @@ async function openMyMatkad(){
     alert('See on premium funktsioon. Vajad Premium, Matkajuhi või Admini staatust.');
     return;
   }
+  mmAktiivneTab='aktiivsed';
   document.getElementById('mmmodal').classList.add('open');
   document.getElementById('mm-list').innerHTML='<div style="padding:30px;text-align:center;color:var(--text3);">⏳ Laen matku...</div>';
   await loadMyMatkad();
-  renderMyMatkad();
+  switchMmTab('aktiivsed');
 }
 
 function closeMyMatkad(){
@@ -5928,15 +5933,43 @@ function closeMyMatkad(){
 }
 
 // Renderda matkade nimekiri
+let mmAktiivneTab='aktiivsed';
+
+function switchMmTab(tab){
+  mmAktiivneTab=tab;
+  const aktBtn=document.getElementById('mm-tab-aktiivsed');
+  const ajaBtn=document.getElementById('mm-tab-ajalugu');
+  if(aktBtn){
+    aktBtn.style.background=tab==='aktiivsed'?'var(--accent)':'transparent';
+    aktBtn.style.color=tab==='aktiivsed'?'#fff':'var(--text2)';
+    aktBtn.style.fontWeight=tab==='aktiivsed'?'600':'500';
+  }
+  if(ajaBtn){
+    ajaBtn.style.background=tab==='ajalugu'?'var(--accent)':'transparent';
+    ajaBtn.style.color=tab==='ajalugu'?'#fff':'var(--text2)';
+    ajaBtn.style.fontWeight=tab==='ajalugu'?'600':'500';
+  }
+  renderMyMatkad();
+}
+
 function renderMyMatkad(){
   const el=document.getElementById('mm-list');
   if(!el)return;
+  // Filtreeri aktiivsed/lõpetatud tabi järgi
+  const filteredMatkad=myMatkad.filter(m=>mmAktiivneTab==='ajalugu'?isMatkaPast(m):!isMatkaPast(m));
   if(myMatkad.length===0){
     el.innerHTML='<div style="padding:30px 12px;text-align:center;color:var(--text3);font-size:13px;">Veel pole matku loodud.<br>Vajuta "+ Loo uus matk" et alustada.</div>';
     return;
   }
+  if(filteredMatkad.length===0){
+    const msg=mmAktiivneTab==='ajalugu'
+      ?'Lõpetatud matku pole veel.'
+      :'Aktiivseid matku pole.<br><span style="font-size:12px;">Lõpetatud matkad leiad "Ajalugu" vahelehelt.</span>';
+    el.innerHTML=`<div style="padding:30px 12px;text-align:center;color:var(--text3);font-size:13px;">${msg}</div>`;
+    return;
+  }
   let html='';
-  for(const m of myMatkad){
+  for(const m of filteredMatkad){
     const dateStr=m.algusAeg?m.algusAeg.toLocaleDateString('et-EE',{day:'numeric',month:'long',year:'numeric'})+' '+m.algusAeg.toLocaleTimeString('et-EE',{hour:'2-digit',minute:'2-digit'}):'(kuupäev määramata)';
     const isPast=isMatkaPast(m);
     const statusText=matkaStatusText(m);

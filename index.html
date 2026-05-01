@@ -1767,6 +1767,8 @@ async function loadLoigud(){
     if(!window.loigudByJogi[j])window.loigudByJogi[j]=[];
     window.loigudByJogi[j].push(l);
   });
+  // Rakenda kasutaja salvestatud lõigu piirid
+  applyLoikSp();
 }
 
 // Lae punktid Sheetsist
@@ -2014,7 +2016,28 @@ function renderLoik(l){
   }
   html+=`<button class="vp-btn" style="margin-left:auto;" onclick="openGraph('${(l.jogi||'').replace(/'/g,"\\\\'")}', ${l.algus?l.algus[0]:'null'}, ${l.algus?l.algus[1]:'null'})">📊 Graafik</button>`;
   if(currentUser)html+=`<button class="vp-btn" onclick="openRaport('${(l.jogi||'').replace(/'/g,"\\\\'")}','${(l.nimi||'').replace(/'/g,"\\\\'")}')">📝 Raport</button>`;
+  html+=`<button class="vp-btn" onclick="toggleLoikSp('${l.id}')" title="Seadista veetaseme piirid">⚙️</button>`;
   html+='</div>';
+  // Lõigu veetaseme piiride seadistusplokk
+  const hasCustom=l.kayakMin!=null||l.maxSafe!=null;
+  const jSt=selSt||allSt.find(s=>s.jogi===l.jogi);
+  html+=`<div id="loik-sp-${l.id}" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+    <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:10px;">⚙️ Lõigu veetaseme piirid</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.5;">
+      ${hasCustom
+        ? '✅ Sellel lõigul on <b>omad piirid</b> — kasutatakse jõe üldiste piiride asemel.'
+        : `ℹ️ Kasutab hetkel <b>jõe üldisi piire</b> (kajak min ${jSt?.kayakMin??'?'} cm, max ${jSt?.maxSafe??'?'} cm). Lisa lõigupõhised piirid allpool.`}
+    </div>
+    <div class="sp-row"><label>🚣 Kajak min (cm)</label><input type="number" id="lsp-km-${l.id}" value="${l.kayakMin??''}" placeholder="${jSt?.kayakMin??40}"/></div>
+    <div class="sp-row"><label>🛶 Rafting min (cm)</label><input type="number" id="lsp-rm-${l.id}" value="${l.raftMin??''}" placeholder="${jSt?.raftMin??60}"/></div>
+    <div class="sp-row"><label>⚠️ Max ohutu (cm)</label><input type="number" id="lsp-ms-${l.id}" value="${l.maxSafe??''}" placeholder="${jSt?.maxSafe??150}"/></div>
+    <div class="sp-row"><label>🚫 Absoluutne max</label><input type="number" id="lsp-am-${l.id}" value="${l.absMax??''}" placeholder="${jSt?.absMax??200}"/></div>
+    <div style="display:flex;gap:6px;margin-top:10px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="saveLoikSp('${l.id}','${escapeHtml(l.jogi)}')">💾 Salvesta</button>
+      ${hasCustom?`<button class="btn" style="color:var(--red);border-color:rgba(220,38,38,0.3);" onclick="clearLoikSp('${l.id}','${escapeHtml(l.jogi)}')">✕ Eemalda piirid</button>`:''}
+    </div>
+    <div style="font-size:10px;color:var(--text3);margin-top:8px;">Piirid salvestatakse ainult sinu seadmesse. Tühjad väljad kasutavad jõe üldisi piire.</div>
+  </div>`;
   // Viimased raportid
   html+=`<div id="loik-raportid" style="margin-bottom:8px;"></div>`;
   // Laadi raportid asünkroonselt
@@ -3054,6 +3077,14 @@ async function checkAchievements(){
 }
 
 // Näita saavutuse toast teavitust
+function showToast(msg, duration=2500){
+  const toast=document.createElement('div');
+  toast.style.cssText=`position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:99999;background:var(--accent);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-family:'DM Sans',sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.2);pointer-events:none;`;
+  toast.textContent=msg;
+  document.body.appendChild(toast);
+  setTimeout(()=>toast.remove(), duration);
+}
+
 function showAchievementToast(list){
   for(let i=0;i<list.length;i++){
     setTimeout(()=>{
@@ -3313,6 +3344,65 @@ function getVeetaseHoiatus(r){
       ${tousev?'↑':'↓'} Vesi ${tousev?'tõusnud':'langenud'} ${tousev?'+':''}${d} cm viimase ööpäevaga
     </div>`;
   }
+}
+
+// =============== LÕIGU VEETASEME PIIRID ===============
+
+const SK_LOIK_SP='rv9_loik_sp'; // localStorage key lõigu piiride jaoks
+
+function loadLoikSp(){
+  try{return JSON.parse(localStorage.getItem(SK_LOIK_SP)||'{}');}catch(e){return{};}
+}
+function saveLoikSpStore(data){
+  try{localStorage.setItem(SK_LOIK_SP,JSON.stringify(data));}catch(e){}
+}
+
+// Rakenda salvestatud lõigu piirid peale lõikude laadimist
+function applyLoikSp(){
+  const sp=loadLoikSp();
+  if(!sp||!Object.keys(sp).length)return;
+  loigud.forEach(l=>{
+    const k=l.jogi+'__'+l.id;
+    if(sp[k]){
+      if(sp[k].kayakMin!=null)l.kayakMin=sp[k].kayakMin;
+      if(sp[k].raftMin!=null)l.raftMin=sp[k].raftMin;
+      if(sp[k].maxSafe!=null)l.maxSafe=sp[k].maxSafe;
+      if(sp[k].absMax!=null)l.absMax=sp[k].absMax;
+    }
+  });
+}
+
+function toggleLoikSp(loikId){
+  const el=document.getElementById('loik-sp-'+loikId);
+  if(el)el.style.display=el.style.display==='none'?'block':'none';
+}
+
+function saveLoikSp(loikId, jogi){
+  const g=sfx=>{ const v=document.getElementById('lsp-'+sfx+'-'+loikId)?.value?.trim(); return v===''?null:parseInt(v,10)||null; };
+  const km=g('km'), rm=g('rm'), ms=g('ms'), am=g('am');
+  // Rakenda kohe loigud massiivi
+  const l=loigud.find(ll=>ll.id===loikId);
+  if(l){l.kayakMin=km;l.raftMin=rm;l.maxSafe=ms;l.absMax=am;}
+  // Salvesta localStorage
+  const sp=loadLoikSp();
+  const k=jogi+'__'+loikId;
+  sp[k]={kayakMin:km,raftMin:rm,maxSafe:ms,absMax:am};
+  saveLoikSpStore(sp);
+  // Uuenda UI
+  document.getElementById('loik-sp-'+loikId).style.display='none';
+  if(activeLoik?.id===loikId)renderLoik(activeLoik);
+  showToast('✅ Lõigu piirid salvestatud!');
+}
+
+function clearLoikSp(loikId, jogi){
+  if(!confirm('Eemalda lõigu piirid ja kasuta jõe üldisi piire?'))return;
+  const l=loigud.find(ll=>ll.id===loikId);
+  if(l){l.kayakMin=null;l.raftMin=null;l.maxSafe=null;l.absMax=null;}
+  const sp=loadLoikSp();
+  delete sp[jogi+'__'+loikId];
+  saveLoikSpStore(sp);
+  if(activeLoik?.id===loikId)renderLoik(activeLoik);
+  showToast('✅ Lõigu piirid eemaldatud');
 }
 
 // =============== DÜNAAMILINE RASKUSASTE ===============

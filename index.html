@@ -2,7 +2,14 @@
 <html lang="et">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2d5a3d"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Veeretked"/>
+<meta name="description" content="Eesti ja Läti jõgede reaalajas veetasemed, matkade haldus ja GPS sõidulogi"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icons/icon-192.png"/>
 <title>Veeretked.ee — Jõgede Veetasemed</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
@@ -897,6 +904,7 @@
 <script>
 const SK='rv9';
 const SK_LEMMIKUD='rv9_lemmikud'; // Lemmikuks märgitud jaamade ID-d
+const SK_OFFLINE_DATA='rv9_offline_data'; // Viimati laetud veetasemeandmed offline kasutuseks
 // A=Veekogu, B=Jaam, C=Veetase(cm) — täpselt sinu Sheetsi struktuur
 const SHEET_ID='1ih6_OZSzPpxQvK4-kdfyMdZDO8j0C_CTPtMTjH3KFkY';
 const GVIZ_EE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=0';
@@ -1349,6 +1357,14 @@ async function refreshAll(){
     await Promise.all([loadDefaults(), loadCSV(), loadLoigud(), loadPunktid()]);
     buildRivers();
     lsSave();
+    // Salvesta offline cache'i
+    const offlineData=allSt.filter(s=>!s.isCache).map(s=>({
+      jaam:s.jaam, jogi:s.jogi, level:s.level, delta24:s.delta24,
+      waterT:s.waterT, airT:s.airT, updated:s.updated?.toISOString?.()
+    }));
+    if(offlineData.length>0){
+      try{localStorage.setItem(SK_OFFLINE_DATA,JSON.stringify({data:offlineData,ts:Date.now()}));}catch(e){}
+    }
     const cnt=allSt.length;
     const cacheCnt=allSt.filter(s=>s.isCache).length;
     const txt=cacheCnt>0?`${cnt} jaama laetud (${cacheCnt} varuandmetest) · ${fmt(lupd)}`:`${cnt} jaama laetud · ${fmt(lupd)}`;
@@ -1356,6 +1372,10 @@ async function refreshAll(){
     document.getElementById('sdot').className='sdot';
     document.getElementById('lupd').textContent=fmt(lupd);
     filtSt=[...allSt];
+    // Kui offline, näita infot
+    if(!navigator.onLine){
+      document.getElementById('stxt').textContent=`📵 Offline — ${cnt} jaama varuandmetest · ${fmt(lupd)}`;
+    }
   }catch(e){
     document.getElementById('stxt').textContent='Viga: '+e.message;
     document.getElementById('sdot').className='sdot err';
@@ -1871,7 +1891,7 @@ function openV(jogi){
   // Tabid lõikude kaupa (kasutaja omad on eristatud ⭐ märgiga)
   const tabsEl=document.getElementById('vp-tabs');
   let tabsHtml=myLoigud.map((l,i)=>{
-    const lbl=l.isUserLoik?'⭐ '+(l.nimi||l.id):(l.id+': '+(l.nimi||l.id));
+    const lbl=l.isUserLoik?'⭐ '+(l.nimi||l.id):(l.nimi||l.id);
     return `<button class="vp-tab ${i===0?'active':''} ${l.isUserLoik?'user-loik':''}" onclick="selectLoik('${l.id}')">${lbl}</button>`;
   }).join('');
   // Lisa "+ Loo oma lõik" nupp ainult Premium+ kasutajatele
@@ -1904,7 +1924,8 @@ function selectLoik(loikId){
   document.querySelectorAll('.vp-tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.vp-tab').forEach(t=>{
     const txt=t.textContent;
-    if(txt.startsWith(loikId+':')||(l.isUserLoik&&txt==='⭐ '+(l.nimi||l.id))){
+    const expectedLbl=l.isUserLoik?'⭐ '+(l.nimi||l.id):(l.nimi||l.id);
+    if(txt===expectedLbl){
       t.classList.add('active');
     }
   });
@@ -6718,5 +6739,60 @@ async function init(){
 }
 init();
 </script>
+<!-- OFFLINE BANNER -->
+<div id="offline-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;background:#92400e;color:#fff;text-align:center;padding:8px 16px;font-size:12px;font-family:'DM Sans',sans-serif;">
+  📵 Offline — kuvatakse viimati salvestatud andmed
+</div>
+
+<!-- UPDATE BANNER -->
+<div id="update-banner" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:99998;background:var(--accent,#2d5a3d);color:#fff;border-radius:10px;padding:10px 18px;font-size:13px;font-family:'DM Sans',sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;">
+  🔄 Uus versioon saadaval
+  <button onclick="applyUpdate()" style="background:#fff;color:#2d5a3d;border:none;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">Uuenda</button>
+  <button onclick="document.getElementById('update-banner').style.display='none'" style="background:transparent;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:16px;padding:2px 4px;">✕</button>
+</div>
+
+<script>
+// Service Worker registreerimine
+if ('serviceWorker' in navigator) {
+  let newWorker;
+
+  navigator.serviceWorker.register('./sw.js').then(reg => {
+    // Kontrolli uuendusi
+    reg.addEventListener('updatefound', () => {
+      newWorker = reg.installing;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          // Uus versioon on saadaval
+          document.getElementById('update-banner').style.display = 'flex';
+        }
+      });
+    });
+
+    // Perioodiline uuenduste kontroll (iga 30 min)
+    setInterval(() => reg.update(), 30 * 60 * 1000);
+  }).catch(err => console.warn('[PWA] SW registreerimine ebaõnnestus:', err));
+
+  // Võrguühenduse jälgimine
+  function updateOnlineStatus() {
+    const banner = document.getElementById('offline-banner');
+    if (banner) banner.style.display = navigator.onLine ? 'none' : 'block';
+  }
+  window.addEventListener('online', updateOnlineStatus);
+  window.addEventListener('offline', updateOnlineStatus);
+  updateOnlineStatus();
+}
+
+function applyUpdate() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistration().then(reg => {
+      if (reg && reg.waiting) {
+        reg.waiting.postMessage('SKIP_WAITING');
+      }
+    });
+    window.location.reload();
+  }
+}
+</script>
+
 </body>
 </html>

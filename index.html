@@ -3424,13 +3424,17 @@ function renderStats(stats, history, history_achievements=[]){
           <div style="font-size:13px;font-weight:600;color:var(--text);font-family:'DM Mono',monospace;">${km} km</div>
           <div style="font-size:11px;color:var(--text3);">${durStr}</div>
         </div>
-        ${t.track&&t.track.length>1?`<button onclick="openTripRaja('${t.id}')" class="ibtn" style="flex-shrink:0;" title="Vaata rada kaardil">🗺️</button>`:''}
+        ${t.track&&t.track.length>1?`<button onclick="openTripRaja('${t.id}')" class="ibtn" style="flex-shrink:0;" title="Vaata rada kaardil">🗺️</button>`:'<div style="width:28px;flex-shrink:0;"></div>'}
       </div>`;
     }
     html+='</div></div>';
   } else if(tripsCount===0){
-    html+=`<div style="text-align:center;padding:20px 12px;color:var(--text3);font-size:13px;border:1px dashed var(--border);border-radius:8px;">
+    html+=`<div style="text-align:center;padding:20px 12px;color:var(--text3);font-size:13px);border:1px dashed var(--border);border-radius:8px;">
       🚣 Veel pole ühtegi sõitu.<br>Vali lõik kaardilt ja vajuta "Alusta sõitu"!
+    </div>`;
+  } else {
+    html+=`<div style="text-align:center;padding:16px 12px;color:var(--text3);font-size:12px;border:1px dashed var(--border);border-radius:8px;">
+      📋 Sõitude ajalugu laaditakse...<br><span style="font-size:11px;">Kui ajalugu ei ilmu, võivad vanemad sõidud olla arhiveeritud.</span>
     </div>`;
   }
   if(lastTrip&&tripsCount>0){

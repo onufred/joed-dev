@@ -985,6 +985,19 @@
   </div>
 </div>
 
+<!-- SÕIDURAJA KAART -->
+<div class="overlay" id="triprajamodal">
+  <div class="modal vmodal" style="max-width:600px;">
+    <div class="modal-title">🗺️ Sõiduraja vaade</div>
+    <div id="triprajamodal-info" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
+    <div id="triprajamodal-map" style="height:300px;border-radius:10px;border:1px solid var(--border);z-index:1;margin-bottom:10px;"></div>
+    <div class="mact">
+      <button class="btn" onclick="closeTripRaja()">Sulge</button>
+      <button class="btn btn-primary" onclick="exportTripGpx()">⬇️ GPX fail</button>
+    </div>
+  </div>
+</div>
+
 <!-- SÕIDURAPORT -->
 <div class="overlay" id="raportmodal">
   <div class="modal vmodal">
@@ -3411,6 +3424,7 @@ function renderStats(stats, history, history_achievements=[]){
           <div style="font-size:13px;font-weight:600;color:var(--text);font-family:'DM Mono',monospace;">${km} km</div>
           <div style="font-size:11px;color:var(--text3);">${durStr}</div>
         </div>
+        ${t.track&&t.track.length>1?`<button onclick="openTripRaja('${t.id}')" class="ibtn" style="flex-shrink:0;" title="Vaata rada kaardil">🗺️</button>`:''}
       </div>`;
     }
     html+='</div></div>';
@@ -4763,6 +4777,107 @@ async function renderRiverPrognoos(river, el){
   // Lisa graafiku lõppu
   const existing=document.getElementById('g-content');
   if(existing)existing.innerHTML+=html;
+}
+
+// =============== SÕIDURAJA VAADE ===============
+
+let tripRajaMap=null;
+let activeTripRajaData=null;
+
+async function openTripRaja(tripId){
+  document.getElementById('statsmodal').classList.remove('open');
+  document.getElementById('triprajamodal').classList.add('open');
+  document.getElementById('triprajamodal-info').innerHTML='<span style="color:var(--text3);font-size:12px;">⏳ Laen...</span>';
+  document.getElementById('triprajamodal-map').innerHTML='';
+  try{
+    const fb=window.fb;
+    const snap=await fb.getDoc(fb.doc(fb.db,'trips',tripId));
+    if(!snap.exists()){alert('Sõitu ei leitud');closeTripRaja();return;}
+    const t={id:snap.id,...snap.data()};
+    activeTripRajaData=t;
+    renderTripRaja(t);
+  }catch(err){
+    document.getElementById('triprajamodal-info').innerHTML=`<span style="color:var(--red);">⚠️ ${escapeHtml(err.message)}</span>`;
+  }
+}
+
+function closeTripRaja(){
+  document.getElementById('triprajamodal').classList.remove('open');
+  document.getElementById('statsmodal').classList.add('open');
+  if(tripRajaMap){tripRajaMap.remove();tripRajaMap=null;}
+  activeTripRajaData=null;
+}
+
+function renderTripRaja(t){
+  const track=t.track||[];
+  const date=t.startTs?new Date(t.startTs).toLocaleDateString('et-EE',{day:'numeric',month:'long',year:'numeric'}):'—';
+  const km=(t.distKm||0).toFixed(1);
+  const dur=t.startTs&&t.endTs?Math.round((t.endTs-t.startTs)/60000):null;
+  const durStr=dur?(dur<60?dur+' min':Math.floor(dur/60)+'h '+(dur%60)+'min'):'—';
+  // Kiirus
+  const avgSpeed=dur&&parseFloat(km)>0?(parseFloat(km)/(dur/60)).toFixed(1):null;
+
+  // Info kastid
+  const infoEl=document.getElementById('triprajamodal-info');
+  infoEl.innerHTML=[
+    ['🌊',t.jogi||'—'],
+    ['🛶',t.loik||'—'],
+    ['📅',date],
+    ['📏',km+' km'],
+    ['⏱️',durStr],
+    avgSpeed?['🚀',avgSpeed+' km/h']:null,
+  ].filter(Boolean).map(([icon,val])=>`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;display:flex;gap:5px;align-items:center;">
+      <span>${icon}</span><span style="font-weight:500;color:var(--text);">${escapeHtml(String(val))}</span>
+    </div>`).join('');
+
+  // Kaart
+  if(track.length<2){
+    document.getElementById('triprajamodal-map').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px;">Raja andmed puuduvad</div>';
+    return;
+  }
+  // Init Leaflet kaart
+  if(tripRajaMap){tripRajaMap.remove();tripRajaMap=null;}
+  const center=[track[Math.floor(track.length/2)].lat, track[Math.floor(track.length/2)].lng];
+  tripRajaMap=L.map('triprajamodal-map').setView(center,13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© OpenStreetMap',maxZoom:18
+  }).addTo(tripRajaMap);
+
+  // Raja joon
+  const latlngs=track.map(p=>[p.lat,p.lng]);
+  const polyline=L.polyline(latlngs,{color:'#1a6b4a',weight:4,opacity:0.85}).addTo(tripRajaMap);
+  tripRajaMap.fitBounds(polyline.getBounds(),{padding:[20,20]});
+
+  // Start ja lõpp markerid
+  const startIcon=L.divIcon({html:'<div style="background:#16a34a;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);">🚩</div>',className:'',iconSize:[24,24],iconAnchor:[12,12]});
+  const endIcon=L.divIcon({html:'<div style="background:#dc2626;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);">🏁</div>',className:'',iconSize:[24,24],iconAnchor:[12,12]});
+  L.marker([track[0].lat,track[0].lng],{icon:startIcon}).addTo(tripRajaMap).bindPopup('Alguspunkt');
+  L.marker([track[track.length-1].lat,track[track.length-1].lng],{icon:endIcon}).addTo(tripRajaMap).bindPopup('Lõpp');
+}
+
+function exportTripGpx(){
+  const t=activeTripRajaData;
+  if(!t||!t.track||t.track.length<2){alert('Raja andmed puuduvad');return;}
+  const date=t.startTs?new Date(t.startTs).toISOString():'';
+  const name=escapeHtml(`${t.jogi||'Sõit'} – ${t.loik||''} ${date.slice(0,10)}`);
+  let gpx=`<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Veeretked" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>${name}</name>
+    <trkseg>
+${t.track.map(p=>`      <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lng.toFixed(6)}">${p.ts?`<time>${new Date(p.ts).toISOString()}</time>`:''}</trkpt>`).join('\n')}
+    </trkseg>
+  </trk>
+</gpx>`;
+  const blob=new Blob([gpx],{type:'application/gpx+xml'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=`veeretked-${(t.jogi||'soit').toLowerCase().replace(/\s+/g,'-')}-${date.slice(0,10)}.gpx`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✅ GPX fail allalaaditud!');
 }
 
 // =============== EDETABEL ===============
